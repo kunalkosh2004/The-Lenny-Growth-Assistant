@@ -9,7 +9,7 @@ from app.api.providers import router as providers_router
 from app.api.sessions import router as sessions_router
 from app.api.skills import router as skills_router
 from app.core.config import get_settings
-from app.core.logging import configure_logging
+from app.core.logging import RequestIDMiddleware, configure_logging
 
 
 def create_app() -> FastAPI:
@@ -29,6 +29,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestIDMiddleware)
 
     app.include_router(health_router)
     app.include_router(artifacts_router)
