@@ -3,276 +3,264 @@
 An evaluator-friendly full-stack AI product for asking grounded product and
 growth questions over a local Lenny's Podcast transcript knowledge base.
 
-Current state: Milestone 3 knowledge base is complete. The repository has a
-fully working transcript ingestion pipeline, vector search over PostgreSQL/
-pgvector, Ollama embedding support, and verified retrieval of grounded
-content. LLM provider abstraction and chat grounding arrive in Milestone 4.
+Users can ask complex product management questions, receive answers grounded
+in transcript knowledge with source citations, generate Ship 30 for 30-style
+essays, and create Markdown/HTML artifacts — all powered by Ollama locally
+or a cloud LLM provider.
 
 ## Features
 
-- Health and readiness API endpoints.
-- Session and message persistence APIs.
-- PostgreSQL models for users, chat sessions, messages, and artifacts.
-- Alembic migrations for schema management.
-- Three-panel product shell: session sidebar, chat workspace, artifact viewer.
-- PostgreSQL + pgvector Docker foundation.
-- Environment-driven configuration.
-- Documentation for product, design, architecture, and manual testing.
+- **Grounded conversational AI** — answers sourced from 303 Lenny's Podcast
+  transcripts with source citations (guest name, episode title, date).
+- **Multiple chat sessions** — independent conversation contexts persisted
+  in PostgreSQL.
+- **Follow-up questions** — conversation history provides context for
+  multi-turn grounded dialogue.
+- **Ship 30 for 30 writing skill** — generates ~1,250-word essays with
+  structured hooks, actionable insights, and source grounding.
+- **Artifact generation** — Markdown documents and complete HTML/CSS pages
+  generated from transcript knowledge.
+- **Secure artifact viewer** — HTML rendered in a sandboxed iframe with
+  scripts blocked.
+- **LLM provider abstraction** — switch between Ollama (local) and OpenAI
+  (cloud) without code changes via environment variable or API.
+- **Vector search** — pgvector cosine similarity retrieval over chunked
+  and embedded transcripts.
+- **Structured logging** — request IDs for end-to-end tracing.
+- **Health endpoints** — `/health` and `/health/ready` for monitoring.
 
-- Transcript ingestion from `knowledge-source/lennys-podcast-transcripts`.
-- Vector search over pgvector with cosine similarity ranking.
-- Content-hash-based ingestion refresh (skip unchanged episodes).
-- Ollama local embeddings (nomic-embed-text) and OpenAI cloud embeddings.
-- Knowledge base status and search API endpoints.
-- `/api/knowledge/status` and `/api/knowledge/search` endpoints.
-
-Planned features:
-
-- Grounded RAG answers with citations.
-- Ollama and OpenAI LLM provider abstraction.
-- Ship 30 for 30 essay skill.
-- Markdown and sandboxed HTML/CSS artifact rendering.
-
-## Architecture Overview
+## Architecture
 
 ```text
-Next.js frontend
-      |
-      v
-FastAPI backend
-      |
-      +--> PostgreSQL session/artifact persistence
-      +--> PostgreSQL + pgvector transcript retrieval
-      +--> Ollama / OpenAI provider abstraction
+┌──────────────────────────────────────────────────────────┐
+│                     Next.js Frontend                     │
+│  ┌──────────┬──────────────────┬──────────────────────┐  │
+│  │ Sidebar  │    Chat Panel    │   Artifact Viewer    │  │
+│  │ Sessions │ Messages/Sources │  MD/HTML (sandboxed) │  │
+│  └──────────┴──────────────────┴──────────────────────┘  │
+└───────────────────────┬──────────────────────────────────┘
+                        │ HTTP
+┌───────────────────────┴──────────────────────────────────┐
+│                    FastAPI Backend                        │
+│  ┌─────────┬──────────┬──────────┬──────────┬─────────┐  │
+│  │ Sessions│  Chat    │Artifacts │ Skills   │Providers│  │
+│  └────┬────┴────┬─────┴────┬─────┴────┬─────┴────┬────┘  │
+│       │         │          │          │          │        │
+│  ┌────┴─────────┴──────────┴──────────┴──────────┴────┐  │
+│  │              ChatService / RetrievalService          │  │
+│  └────────────────────────┬───────────────────────────┘  │
+│                           │                              │
+│  ┌────────────────────────┴───────────────────────────┐  │
+│  │         LLM Provider Abstraction Layer              │  │
+│  │    ┌──────────────┐        ┌──────────────┐        │  │
+│  │    │OllamaProvider│        │OpenAIProvider│        │  │
+│  │    └──────────────┘        └──────────────┘        │  │
+│  └────────────────────────────────────────────────────┘  │
+└───────────────────────┬──────────────────────────────────┘
+                        │
+┌───────────────────────┴──────────────────────────────────┐
+│              PostgreSQL + pgvector                        │
+│  ┌─────────────┬──────────────┬───────────────────────┐  │
+│  │   Sessions  │  Artifacts   │  Transcript Chunks    │  │
+│  │   Messages  │              │  (embeddings + meta)  │  │
+│  └─────────────┴──────────────┴───────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
 ```
 
-See [architecture.md](architecture.md) for details.
+See [architecture.md](architecture.md) for detailed design decisions.
 
 ## Tech Stack
 
-- Backend: Python, FastAPI, Pydantic, SQLAlchemy, PostgreSQL, pgvector
-- Frontend: Next.js, React, TypeScript, Tailwind CSS
-- AI: Ollama for local demo, OpenAI as the first cloud provider
-- Testing: pytest for backend, frontend lint/type checks
-- Deployment: Docker Compose
+| Layer    | Technology                                             |
+| -------- | ------------------------------------------------------ |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 3     |
+| Backend  | Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic   |
+| Database | PostgreSQL 16, pgvector                                |
+| AI       | Ollama (local), OpenAI (cloud)                         |
+| Testing  | pytest (backend), TypeScript strict mode (frontend)    |
+| Deploy   | Docker Compose                                         |
 
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 22+
 - Docker and Docker Compose
-- Ollama for local model execution
+- Ollama (for local LLM demo)
 
-## Installation
+## Quick Start
 
 ```bash
+# 1. Clone the repository
+git clone <repository-url>
+cd lenny-growth-assistant
+
+# 2. Copy environment file
 cp .env.example .env
-```
 
-Backend:
+# 3. Start PostgreSQL
+docker compose up postgres -d
 
-```bash
+# 4. Install backend dependencies
 cd backend
 uv sync --all-groups
+
+# 5. Run database migrations
+uv run alembic upgrade head
+
+# 6. Start the backend
 uv run uvicorn app.main:app --reload
-```
 
-Frontend:
-
-```bash
+# 7. In a separate terminal, install and start the frontend
 cd frontend
 npm install
 npm run dev
 ```
 
-## Environment Setup
+## Transcript Setup
 
-Start from `.env.example`. Do not commit `.env` or API keys.
-
-Important variables:
-
-- `DATABASE_URL`: PostgreSQL connection string.
-- `TRANSCRIPTS_DIR`: local transcript episodes directory.
-- `LLM_PROVIDER`: `ollama` by default.
-- `OLLAMA_BASE_URL`: local Ollama server URL.
-- `OLLAMA_MODEL`: default local model candidate.
-- `OPENAI_API_KEY`: optional cloud provider key.
-
-## Database Setup
-
-Milestone 2 adds Alembic migrations and PostgreSQL models for sessions,
-messages, and artifacts.
+The knowledge base requires Lenny's Podcast transcripts:
 
 ```bash
-docker compose up postgres -d
-cd backend
-uv run alembic upgrade head
-```
+# Clone the transcript repository
+git clone --depth 1 https://github.com/ChatPRD/lennys-podcast-transcripts.git \
+  knowledge-source/lennys-podcast-transcripts
 
-If port `5432` is already in use locally, set an alternate host port before
-starting PostgreSQL:
-
-```bash
-POSTGRES_PORT=5434 docker compose up postgres -d
-```
-
-Then point `DATABASE_URL` at that port for migrations and local API runs.
-
-## Ollama Setup
-
-Install Ollama locally and pull the configured model:
-
-```bash
-ollama pull llama3.1:8b
-```
-
-The app will treat Ollama availability as a provider health concern in
-Milestone 4.
-
-## Cloud Provider Setup
-
-OpenAI is the planned first cloud provider. Set `OPENAI_API_KEY` in `.env` when
-using cloud generation. Missing credentials will be handled gracefully.
-
-## Transcript Ingestion
-
-The transcript repository is cloned into:
-
-```text
-knowledge-source/lennys-podcast-transcripts/
-```
-
-The ingestion pipeline reads every `**/transcript.md` under the `episodes/`
-directory, parses YAML frontmatter, chunks the content, generates embeddings,
-and stores everything in PostgreSQL + pgvector.
-
-```bash
 # Validate transcript source
 ./backend/.venv/bin/python scripts/validate_transcripts.py
 
-# Ingest all transcripts (requires Ollama running with nomic-embed-text)
-DATABASE_URL="..." EMBEDDING_PROVIDER=ollama \
+# Ingest transcripts into the knowledge base (requires Ollama)
+DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:5432/lenny_growth_assistant" \
+  EMBEDDING_PROVIDER=ollama \
   ./backend/.venv/bin/python scripts/ingest_transcripts.py
 
-# Ingest a subset for faster verification
+# For faster verification, ingest a subset
 ./backend/.venv/bin/python scripts/ingest_transcripts.py --limit 10
-
-# Test retrieval
-curl -X POST http://localhost:8000/api/knowledge/search \
-  -H 'Content-Type: application/json' \
-  -d '{"query": "How should startups improve retention?"}'
 ```
 
-Normal chat usage queries PostgreSQL + pgvector, not the raw transcript files.
-
-## Running Locally
-
-Backend health:
+## Ollama Setup
 
 ```bash
-curl http://localhost:8000/health
-curl http://localhost:8000/health/ready
+# Install Ollama (macOS/Linux)
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull required models
+ollama pull nomic-embed-text    # Embeddings (768 dims)
+ollama pull llama3.1:8b         # Generation (recommended)
+# or
+ollama pull qwen2.5-coder:1.5b  # Smaller/faster alternative
 ```
 
-Session API examples:
+## API Endpoints
 
-```bash
-curl -X POST http://localhost:8000/api/sessions \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Retention strategy"}'
-
-curl http://localhost:8000/api/sessions
-
-curl -X POST http://localhost:8000/api/sessions/<session-id>/messages \
-  -H 'Content-Type: application/json' \
-  -d '{"role":"user","content":"How do guests describe PMF?"}'
-
-curl http://localhost:8000/api/sessions/<session-id>
-```
-
-Frontend:
-
-```bash
-open http://localhost:3000
-```
-
-## Docker Instructions
-
-After creating `.env`:
-
-```bash
-docker compose up --build
-```
-
-Milestone 1 also supports:
-
-```bash
-docker compose config
-```
-
-to validate the Compose file shape.
+| Method   | Path                             | Description                    |
+| -------- | -------------------------------- | ------------------------------ |
+| GET      | `/health`                        | Application health             |
+| GET      | `/health/ready`                  | Readiness (DB check)           |
+| POST     | `/api/sessions`                  | Create a new chat session      |
+| GET      | `/api/sessions`                  | List all sessions              |
+| GET      | `/api/sessions/{id}`             | Get session with messages      |
+| POST     | `/api/sessions/{id}/messages`    | Add a message to a session     |
+| POST     | `/api/chat`                      | Send a grounded chat message   |
+| GET      | `/api/providers`                 | List LLM providers             |
+| POST     | `/api/providers/select`          | Switch active provider         |
+| GET      | `/api/knowledge/status`          | Knowledge base statistics      |
+| POST     | `/api/knowledge/search`          | Search transcript chunks       |
+| POST     | `/api/artifacts/generate`        | Generate a Markdown/HTML artifact |
+| GET      | `/api/artifacts/{id}`            | Retrieve a stored artifact     |
+| POST     | `/api/skills/ship30`             | Generate a Ship 30 essay       |
 
 ## Running Tests
 
-Backend:
-
 ```bash
+# Backend
 cd backend
-uv run pytest
+TEST_DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:5432/lenny_growth_assistant" \
+  uv run pytest -v
+
+# Frontend
+cd frontend
+npx tsc --noEmit
 ```
 
-Frontend:
+## Docker Compose
 
 ```bash
-cd frontend
-npm run typecheck
-npm run build
+# Start all services
+docker compose up --build
+
+# Start only PostgreSQL
+docker compose up postgres -d
 ```
 
 ## Troubleshooting
 
-- **Database unavailable:** confirm PostgreSQL is running and `DATABASE_URL` is
-  correct.
-- **Port 5432 already in use:** start Compose with `POSTGRES_PORT=5434` (or
-  another free port) and update `DATABASE_URL` accordingly.
-- **Ollama unavailable:** confirm Ollama is installed, running, and has the
-  configured model.
-- **Missing cloud key:** set `OPENAI_API_KEY` or use `LLM_PROVIDER=ollama`.
-- **Transcript directory missing:** clone or place the transcript repository
-  under `knowledge-source/lennys-podcast-transcripts/`.
+| Issue                        | Solution                                                    |
+| ---------------------------- | ----------------------------------------------------------- |
+| Database unavailable         | Confirm PostgreSQL is running; check `DATABASE_URL`         |
+| Port 5432 already in use     | Start with `POSTGRES_PORT=5434` and update `DATABASE_URL`  |
+| Ollama unavailable           | Ensure Ollama is running and models are installed           |
+| Model not found              | Run `ollama pull <model-name>`                              |
+| Missing cloud key            | Set `OPENAI_API_KEY` or use `LLM_PROVIDER=ollama`          |
+| Transcript directory missing | Clone transcript repo into `knowledge-source/`              |
+| Ingestion too slow           | Use `--limit N` for faster testing                          |
+| Frontend can't reach backend | Check `NEXT_PUBLIC_API_BASE_URL` matches backend port       |
 
 ## Project Structure
 
 ```text
-backend/              FastAPI app
-frontend/             Next.js app
-scripts/              Operational scripts
-docs/                 Manual test and implementation docs
-knowledge-source/     Local raw transcript repository location
-agent-transcripts/    Milestone development logs
+lenny-growth-assistant/
+├── backend/                    FastAPI application
+│   ├── app/
+│   │   ├── api/                Route handlers (chat, sessions, artifacts, etc.)
+│   │   ├── core/               Config, logging
+│   │   ├── db/                 Database session management
+│   │   ├── knowledge/          Retrieval, ingestion, embeddings, chunking
+│   │   ├── models/             SQLAlchemy models
+│   │   ├── providers/          LLM provider abstraction (Ollama, OpenAI)
+│   │   ├── schemas/            Pydantic request/response schemas
+│   │   ├── services/           Business logic (chat, session, artifact)
+│   │   └── skills/             Reusable AI skills (Ship 30)
+│   ├── alembic/                Database migrations
+│   └── tests/                  Automated tests
+├── frontend/                   Next.js application
+│   └── src/
+│       ├── app/                Pages and layouts
+│       ├── components/         React components
+│       ├── lib/                API client, config
+│       └── types/              TypeScript types
+├── knowledge-source/           Local transcript repository
+├── scripts/                    Operational scripts (ingest, validate)
+├── docs/                       Documentation
+├── agent-transcripts/          Development logs
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
 ## Documentation
 
-- [PRD.md](PRD.md)
-- [design.md](design.md)
-- [architecture.md](architecture.md)
-- [docs/implementation-plan.md](docs/implementation-plan.md)
-- [docs/manual-test-plan.md](docs/manual-test-plan.md)
+- [PRD.md](PRD.md) — Product Requirements Document
+- [design.md](design.md) — UI/UX Design Document
+- [architecture.md](architecture.md) — Architecture Document
+- [docs/manual-test-plan.md](docs/manual-test-plan.md) — 17 Manual Tests
+- [docs/implementation-plan.md](docs/implementation-plan.md) — Implementation Plan
 
 ## Known Limitations
 
 - Full ingestion of 303 transcripts takes ~10+ minutes on Ollama CPU.
-  Use `--limit N` for faster verification during development.
-- pgvector column is dimensionless: switching embedding providers (e.g.
-  OpenAI 1536-dim vs Ollama 768-dim) requires re-ingestion.
-- Chat grounding and LLM provider abstraction arrive in Milestone 4.
-- Readiness can report degraded until PostgreSQL is running.
-- Frontend chat controls are a non-persistent foundation shell for now.
+  Use `--limit N` for faster development verification.
+- pgvector column is dimensionless: switching embedding providers requires
+  re-ingestion of all transcripts.
+- Generated HTML artifacts may contain script tags, but these are blocked
+  by the sandboxed iframe.
+- No user authentication (internal tool scope).
+- No real-time streaming of LLM responses (added in a future milestone).
 
 ## Extension Ideas
 
-- Hybrid retrieval with topic index metadata.
-- Evaluation dataset for retrieval and grounded answer quality.
+- Streaming LLM responses for real-time output.
+- Hybrid retrieval with keyword search alongside vector search.
+- Evaluation dataset for retrieval quality.
 - Admin dashboard for ingestion status and transcript coverage.
-- Export artifacts to Markdown, HTML, or Google Docs.
+- Export artifacts to PDF or Google Docs.
+- User authentication and team workspaces.
