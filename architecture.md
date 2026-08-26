@@ -1,0 +1,95 @@
+# Architecture
+
+## Overview
+
+The system separates application concerns into frontend UI, API/session
+persistence, retrieval, agent routing, LLM providers, and artifact rendering.
+
+```mermaid
+flowchart LR
+    Browser[Next.js Frontend] --> FastAPI[FastAPI API]
+    FastAPI --> DB[(PostgreSQL)]
+    FastAPI --> Router[Agent Router]
+    Router --> RAG[Retrieval Service]
+    RAG --> Vector[(pgvector Chunks)]
+    Router --> LLM[LLM Provider Interface]
+    LLM --> Ollama[Ollama]
+    LLM --> OpenAI[OpenAI]
+```
+
+## Frontend
+
+The frontend is a Next.js TypeScript app with an app-first layout:
+
+- Session sidebar.
+- Main chat panel.
+- Artifact viewer.
+- Provider/model status surface.
+- Source citation components.
+
+## Backend
+
+The backend is a FastAPI app organized around:
+
+- `api`: route handlers and API contracts.
+- `core`: settings, logging, request infrastructure.
+- `db`: database sessions and health checks.
+- `models`: SQLAlchemy models.
+- `schemas`: Pydantic request/response models.
+- `services`: application orchestration.
+- `retrieval`: vector search.
+- `providers`: LLM and embedding providers.
+- `skills`: Ship 30 and artifact generation.
+- `agents`: routing between grounded Q&A and generation tasks.
+
+## Database
+
+Milestone 2 will add SQLAlchemy models for users, chat sessions, messages, and
+artifacts. Milestone 3 will add transcript documents and chunks with pgvector
+embeddings and source metadata.
+
+## Initial API Surface
+
+- `GET /health`: process health.
+- `GET /health/ready`: dependency readiness, beginning with database status.
+
+Later milestones will add sessions, chat, providers, artifacts, ingestion, and
+retrieval endpoints.
+
+## Knowledge Pipeline
+
+```mermaid
+flowchart TD
+    Episodes[Local episodes directory] --> Discover[Discover transcript.md]
+    Discover --> Parse[Parse YAML frontmatter]
+    Parse --> Clean[Clean transcript text]
+    Clean --> Chunk[Chunk with overlap]
+    Chunk --> Embed[Generate embeddings]
+    Embed --> Store[Store in PostgreSQL + pgvector]
+    Store --> Retrieve[Query-time vector retrieval]
+```
+
+Normal chat calls query pgvector for relevant chunks. The backend does not load
+all transcript files into the LLM context for each request.
+
+## Provider Abstraction
+
+The planned `LLMProvider` interface will support:
+
+- `generate`: grounded answer/content generation.
+- `health`: provider availability and model status.
+- Configuration from environment variables.
+
+Initial implementations will be Ollama and OpenAI.
+
+## Artifact Security
+
+Markdown artifacts will render as formatted Markdown. HTML/CSS artifacts are
+untrusted and will render in a sandboxed iframe with scripts blocked. The viewer
+will avoid direct arbitrary `dangerouslySetInnerHTML` rendering.
+
+## Deployment
+
+Docker Compose will run PostgreSQL with pgvector, the backend, and the frontend.
+Ollama is documented as a local host dependency so users can manage model pulls
+outside the app container.
