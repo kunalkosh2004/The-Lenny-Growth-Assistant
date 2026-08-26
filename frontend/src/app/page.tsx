@@ -9,6 +9,7 @@ import {
   createSession,
   getSession,
   sendChat,
+  updateSession,
   generateArtifact,
 } from "@/lib/api";
 import type {
@@ -71,6 +72,9 @@ export default function Home() {
     setInput("");
     setSending(true);
 
+    // Check if this is the first message — if so, auto-title the session.
+    const isFirstMessage = messages.length === 0;
+
     // Add user message immediately.
     const tempUserMsg: DisplayMessage = {
       id: `temp-${Date.now()}`,
@@ -81,6 +85,12 @@ export default function Home() {
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempUserMsg]);
+
+    // Auto-title the session with the first message.
+    if (isFirstMessage) {
+      const title = userMsg.length > 80 ? userMsg.slice(0, 80) + "..." : userMsg;
+      updateSession(activeSessionId, title).catch(() => {});
+    }
 
     try {
       const response: ChatApiResponse = await sendChat(
@@ -176,6 +186,10 @@ export default function Home() {
         };
         setMessages([tempUserMsg]);
         setInput("");
+        // Auto-title the session with the first message.
+        const title = question.length > 80 ? question.slice(0, 80) + "..." : question;
+        updateSession(session.id, title).catch(() => {});
+
         try {
           const response: ChatApiResponse = await sendChat(
             session.id,

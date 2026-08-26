@@ -69,6 +69,16 @@ export async function deleteSession(
   await request(`/api/sessions/${sessionId}`, { method: "DELETE" });
 }
 
+export async function updateSession(
+  sessionId: string,
+  title: string,
+): Promise<SessionSummary> {
+  return request<SessionSummary>(`/api/sessions/${sessionId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+}
+
 // --- Chat ---
 
 export async function sendChat(
