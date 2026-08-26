@@ -3,11 +3,10 @@
 An evaluator-friendly full-stack AI product for asking grounded product and
 growth questions over a local Lenny's Podcast transcript knowledge base.
 
-Current state: Milestone 2 persistence is complete. The repository has a
-real FastAPI backend with health and session APIs, Alembic migrations,
-PostgreSQL models for sessions/messages/artifacts, a Next.js app shell,
-Docker foundations, and the core planning docs. Transcript ingestion,
-retrieval, providers, and artifact generation arrive in later milestones.
+Current state: Milestone 3 knowledge base is complete. The repository has a
+fully working transcript ingestion pipeline, vector search over PostgreSQL/
+pgvector, Ollama embedding support, and verified retrieval of grounded
+content. LLM provider abstraction and chat grounding arrive in Milestone 4.
 
 ## Features
 
@@ -20,12 +19,17 @@ retrieval, providers, and artifact generation arrive in later milestones.
 - Environment-driven configuration.
 - Documentation for product, design, architecture, and manual testing.
 
+- Transcript ingestion from `knowledge-source/lennys-podcast-transcripts`.
+- Vector search over pgvector with cosine similarity ranking.
+- Content-hash-based ingestion refresh (skip unchanged episodes).
+- Ollama local embeddings (nomic-embed-text) and OpenAI cloud embeddings.
+- Knowledge base status and search API endpoints.
+- `/api/knowledge/status` and `/api/knowledge/search` endpoints.
+
 Planned features:
 
-- Transcript ingestion from `knowledge-source/lennys-podcast-transcripts`.
 - Grounded RAG answers with citations.
-- Multiple persisted chat sessions.
-- Ollama and cloud LLM provider abstraction.
+- Ollama and OpenAI LLM provider abstraction.
 - Ship 30 for 30 essay skill.
 - Markdown and sandboxed HTML/CSS artifact rendering.
 
@@ -132,19 +136,34 @@ using cloud generation. Missing credentials will be handled gracefully.
 
 ## Transcript Ingestion
 
-Place the transcript repository at:
+The transcript repository is cloned into:
 
 ```text
 knowledge-source/lennys-podcast-transcripts/
 ```
 
-The ingestion pipeline will read:
+The ingestion pipeline reads every `**/transcript.md` under the `episodes/`
+directory, parses YAML frontmatter, chunks the content, generates embeddings,
+and stores everything in PostgreSQL + pgvector.
 
-```text
-knowledge-source/lennys-podcast-transcripts/episodes/**/transcript.md
+```bash
+# Validate transcript source
+./backend/.venv/bin/python scripts/validate_transcripts.py
+
+# Ingest all transcripts (requires Ollama running with nomic-embed-text)
+DATABASE_URL="..." EMBEDDING_PROVIDER=ollama \
+  ./backend/.venv/bin/python scripts/ingest_transcripts.py
+
+# Ingest a subset for faster verification
+./backend/.venv/bin/python scripts/ingest_transcripts.py --limit 10
+
+# Test retrieval
+curl -X POST http://localhost:8000/api/knowledge/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "How should startups improve retention?"}'
 ```
 
-Normal chat usage will query PostgreSQL + pgvector, not the raw transcript files.
+Normal chat usage queries PostgreSQL + pgvector, not the raw transcript files.
 
 ## Running Locally
 
@@ -243,8 +262,11 @@ agent-transcripts/    Milestone development logs
 
 ## Known Limitations
 
-- Milestone 2 persists sessions and messages, but chat is not yet grounded in
-  transcript retrieval.
+- Full ingestion of 303 transcripts takes ~10+ minutes on Ollama CPU.
+  Use `--limit N` for faster verification during development.
+- pgvector column is dimensionless: switching embedding providers (e.g.
+  OpenAI 1536-dim vs Ollama 768-dim) requires re-ingestion.
+- Chat grounding and LLM provider abstraction arrive in Milestone 4.
 - Readiness can report degraded until PostgreSQL is running.
 - Frontend chat controls are a non-persistent foundation shell for now.
 

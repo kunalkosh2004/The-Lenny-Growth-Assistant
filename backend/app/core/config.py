@@ -14,7 +14,19 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:8b"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
-    embedding_provider: str = "openai"
+
+    # Knowledge base / embeddings.
+    # "ollama" keeps the demo fully local (model: nomic-embed-text).
+    # "openai" requires OPENAI_API_KEY (model: text-embedding-3-small).
+    embedding_provider: str = "ollama"
+    ollama_embedding_model: str = "nomic-embed-text"
+    openai_embedding_model: str = "text-embedding-3-small"
+    embedding_timeout_seconds: float = 60.0
+    ingestion_batch_size: int = 32
+
+    # Chunking: target characters per chunk and overlap between neighbors.
+    chunk_target_chars: int = 1200
+    chunk_overlap_chars: int = 150
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     model_config = SettingsConfigDict(
