@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.1:8b"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-4-20250514"
+    google_api_key: str | None = None
+    google_model: str = "gemini-2.0-flash"
 
     # Knowledge base / embeddings.
     # "ollama" keeps the demo fully local (model: nomic-embed-text).

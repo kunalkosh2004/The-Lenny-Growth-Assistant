@@ -48,41 +48,131 @@ def list_ollama_models(
 ) -> dict:
     """List all models available on the Ollama server."""
     base_url = settings.ollama_base_url.rstrip("/")
+    # --- Ollama local models ---
+    ollama_gen: list[dict] = []
+    ollama_embed: list[dict] = []
     try:
         resp = httpx.get(f"{base_url}/api/tags", timeout=10.0)
         resp.raise_for_status()
         raw_models = resp.json().get("models", [])
-        models = []
         for m in raw_models:
             name = m.get("name", "")
-            # Separate generation models from embedding models
             caps = m.get("capabilities", [])
             is_embedding = "embedding" in caps and "completion" not in caps
-            models.append({
+            entry = {
                 "name": name,
                 "size": m.get("size", 0),
                 "parameter_size": m.get("details", {}).get("parameter_size", ""),
                 "family": m.get("details", {}).get("family", ""),
                 "context_length": m.get("details", {}).get("context_length", 0),
                 "is_embedding": is_embedding,
-            })
-        generation_models = [m for m in models if not m["is_embedding"]]
-        embedding_models = [m for m in models if m["is_embedding"]]
-        return {
-            "generation_models": generation_models,
-            "embedding_models": embedding_models,
-        }
+            }
+            if is_embedding:
+                ollama_embed.append(entry)
+            else:
+                ollama_gen.append(entry)
     except httpx.ConnectError:
-        raise HTTPException(
-            status_code=503,
-            detail="Unable to connect to Ollama. Make sure Ollama is running.",
-        ) from None
+        logger.warning("Ollama not reachable at %s", base_url)
     except Exception as exc:
-        logger.error("Failed to list Ollama models: %s", exc)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list Ollama models: {exc}",
-        ) from exc
+        logger.warning("Failed to list Ollama models: %s", exc)
+
+    # --- Cloud provider models (hardcoded popular options) ---
+    cloud_models: list[dict] = []
+
+    if settings.openai_api_key:
+        cloud_models.extend([
+            {
+                "name": "gpt-4.1-mini",
+                "provider": "openai",
+                "family": "GPT-4",
+                "context_length": 1047576,
+            },
+            {
+                "name": "gpt-4.1",
+                "provider": "openai",
+                "family": "GPT-4",
+                "context_length": 1047576,
+            },
+            {
+                "name": "gpt-4o",
+                "provider": "openai",
+                "family": "GPT-4o",
+                "context_length": 128000,
+            },
+            {
+                "name": "gpt-4o-mini",
+                "provider": "openai",
+                "family": "GPT-4o",
+                "context_length": 128000,
+            },
+            {
+                "name": "o3-mini",
+                "provider": "openai",
+                "family": "o3",
+                "context_length": 200000,
+            },
+        ])
+
+    if settings.anthropic_api_key:
+        cloud_models.extend([
+            {
+                "name": "claude-sonnet-4-20250514",
+                "provider": "anthropic",
+                "family": "Claude 4",
+                "context_length": 200000,
+            },
+            {
+                "name": "claude-3-5-sonnet-20241022",
+                "provider": "anthropic",
+                "family": "Claude 3.5",
+                "context_length": 200000,
+            },
+            {
+                "name": "claude-3-5-haiku-20241022",
+                "provider": "anthropic",
+                "family": "Claude 3.5",
+                "context_length": 200000,
+            },
+        ])
+
+    if settings.google_api_key:
+        cloud_models.extend([
+            {
+                "name": "gemini-2.0-flash",
+                "provider": "google",
+                "family": "Gemini 2.0",
+                "context_length": 1048576,
+            },
+            {
+                "name": "gemini-2.5-pro",
+                "provider": "google",
+                "family": "Gemini 2.5",
+                "context_length": 1048576,
+            },
+            {
+                "name": "gemini-2.5-flash",
+                "provider": "google",
+                "family": "Gemini 2.5",
+                "context_length": 1048576,
+            },
+        ])
+
+    # Mark cloud models that lack API keys as unavailable
+    for m in cloud_models:
+        if m["provider"] == "openai":
+            m["available"] = bool(settings.openai_api_key)
+        elif m["provider"] == "anthropic":
+            m["available"] = bool(settings.anthropic_api_key)
+        elif m["provider"] == "google":
+            m["available"] = bool(settings.google_api_key)
+        else:
+            m["available"] = False
+
+    return {
+        "generation_models": ollama_gen,
+        "embedding_models": ollama_embed,
+        "cloud_models": cloud_models,
+    }
 
 
 @router.get("/status")
@@ -113,10 +203,15 @@ def select_active_provider(
     override: dict = {"llm_provider": request.provider}
     if request.model:
         # Set the model for the selected provider
-        if request.provider.lower() == "ollama":
-            override["ollama_model"] = request.model
-        elif request.provider.lower() == "openai":
-            override["openai_model"] = request.model
+        provider_lower = request.provider.lower()
+        model_map = {
+            "ollama": "ollama_model",
+            "openai": "openai_model",
+            "anthropic": "anthropic_model",
+            "google": "google_model",
+        }
+        if provider_lower in model_map:
+            override[model_map[provider_lower]] = request.model
     new_settings = Settings(**{**settings.model_dump(), **override})
     try:
         provider = select_provider(new_settings)

@@ -30,8 +30,9 @@ export default function SessionSidebar({
   const [activeModel, setActiveModel] = useState("");
   const [loading, setLoading] = useState(true);
 
-  // Ollama model list
+  // Model lists
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [cloudModels, setCloudModels] = useState<OllamaModel[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [switching, setSwitching] = useState(false);
 
@@ -52,28 +53,21 @@ export default function SessionSidebar({
     }
   };
 
-  // Fetch Ollama models when provider is ollama
   const refreshModels = async () => {
     try {
       const data = await listOllamaModels();
       setOllamaModels(data.generation_models || []);
+      setCloudModels(data.cloud_models || []);
     } catch {
       setOllamaModels([]);
+      setCloudModels([]);
     }
   };
 
   useEffect(() => {
     refresh();
-    if (activeProvider === "ollama") {
-      refreshModels();
-    }
+    refreshModels();
   }, []);
-
-  useEffect(() => {
-    if (activeProvider === "ollama") {
-      refreshModels();
-    }
-  }, [activeProvider]);
 
   const handleNewChat = async () => {
     try {
@@ -86,16 +80,15 @@ export default function SessionSidebar({
     }
   };
 
-  const handleModelSwitch = async (modelName: string) => {
+  const handleModelSwitch = async (modelName: string, providerName: string) => {
     setSwitching(true);
     setShowModelDropdown(false);
     try {
-      const result = await selectProvider(activeProvider, modelName);
+      const result = await selectProvider(providerName, modelName);
+      setActiveProvider(result.active_provider || providerName);
       setActiveModel(result.active_model);
-      // Re-fetch provider status
       const prov = await listProviders();
       setProviders(prov.providers || []);
-      setActiveProvider(prov.active_provider || "ollama");
     } catch {
       // ignore
     } finally {
@@ -104,6 +97,14 @@ export default function SessionSidebar({
   };
 
   const activeProv = providers.find((p) => p.provider === activeProvider);
+
+  // Group cloud models by provider
+  const cloudByProvider: Record<string, OllamaModel[]> = {};
+  for (const m of cloudModels) {
+    const p = m.provider || "unknown";
+    if (!cloudByProvider[p]) cloudByProvider[p] = [];
+    cloudByProvider[p].push(m);
+  }
 
   return (
     <aside className="flex h-full flex-col border-b border-line bg-white px-5 py-5 lg:border-b-0 lg:border-r">
@@ -135,11 +136,11 @@ export default function SessionSidebar({
         <div className="relative mt-2">
           <button
             onClick={() => {
-              if (!switching && ollamaModels.length > 0) {
+              if (!switching) {
                 setShowModelDropdown(!showModelDropdown);
               }
             }}
-            disabled={switching || ollamaModels.length === 0}
+            disabled={switching}
             className="flex w-full items-center justify-between gap-2 rounded-md border border-line bg-white px-3 py-2 text-left text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
           >
             {switching ? (
@@ -152,7 +153,7 @@ export default function SessionSidebar({
                 {activeModel || "No model selected"}
               </span>
             )}
-            {ollamaModels.length > 0 && !switching && (
+            {!switching && (
               <ChevronDown
                 size={14}
                 className={`shrink-0 text-neutral-400 transition-transform ${
@@ -162,24 +163,96 @@ export default function SessionSidebar({
             )}
           </button>
 
-          {showModelDropdown && ollamaModels.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[260px] overflow-y-auto rounded-md border border-line bg-white shadow-lg">
-              {ollamaModels.map((model) => (
-                <button
-                  key={model.name}
-                  onClick={() => handleModelSwitch(model.name)}
-                  className={`flex w-full flex-col px-3 py-2 text-left text-xs hover:bg-accent/5 ${
-                    model.name === activeModel ? "bg-accent/10 font-medium" : ""
-                  }`}
-                >
-                  <span className="truncate font-medium text-neutral-800">
-                    {model.name}
-                  </span>
-                  <span className="mt-0.5 text-[10px] text-neutral-400">
-                    {model.parameter_size} · {model.family} · ctx {model.context_length.toLocaleString()}
-                  </span>
-                </button>
-              ))}
+          {showModelDropdown && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[380px] overflow-y-auto rounded-md border border-line bg-white shadow-lg">
+              {/* Ollama section */}
+              {ollamaModels.length > 0 && (
+                <div>
+                  <div className="sticky top-0 border-b border-line bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                    🏠 Local — Ollama
+                  </div>
+                  {ollamaModels.map((model) => (
+                    <button
+                      key={model.name}
+                      onClick={() => handleModelSwitch(model.name, "ollama")}
+                      className={`flex w-full flex-col px-3 py-2 text-left text-xs hover:bg-accent/5 ${
+                        model.name === activeModel && activeProvider === "ollama"
+                          ? "bg-accent/10 font-medium"
+                          : ""
+                      }`}
+                    >
+                      <span className="truncate font-medium text-neutral-800">
+                        {model.name}
+                      </span>
+                      <span className="mt-0.5 text-[10px] text-neutral-400">
+                        {model.parameter_size} · {model.family} · ctx{" "}
+                        {model.context_length.toLocaleString()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Cloud sections */}
+              {Object.entries(cloudByProvider).map(([provider, models]) => {
+                const icons: Record<string, string> = {
+                  openai: "🟢",
+                  anthropic: "🟠",
+                  google: "🔵",
+                };
+                const labels: Record<string, string> = {
+                  openai: "Cloud — OpenAI",
+                  anthropic: "Cloud — Anthropic",
+                  google: "Cloud — Google",
+                };
+                return (
+                  <div key={provider}>
+                    <div className="sticky top-0 border-b border-t border-line bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                      {icons[provider] || "☁️"} {labels[provider] || provider}
+                    </div>
+                    {models.map((model) => {
+                      const isAvailable = model.available !== false;
+                      return (
+                        <button
+                          key={model.name}
+                          onClick={() =>
+                            isAvailable &&
+                            handleModelSwitch(model.name, provider)
+                          }
+                          disabled={!isAvailable}
+                          className={`flex w-full flex-col px-3 py-2 text-left text-xs hover:bg-accent/5 disabled:opacity-40 disabled:cursor-not-allowed ${
+                            model.name === activeModel && activeProvider === provider
+                              ? "bg-accent/10 font-medium"
+                              : ""
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate font-medium text-neutral-800">
+                              {model.name}
+                            </span>
+                            {!isAvailable && (
+                              <span className="shrink-0 rounded bg-neutral-200 px-1.5 py-0.5 text-[9px] text-neutral-500">
+                                No API key
+                              </span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 text-[10px] text-neutral-400">
+                            {model.family} · ctx{" "}
+                            {model.context_length.toLocaleString()}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              {/* Empty state */}
+              {ollamaModels.length === 0 && cloudModels.length === 0 && (
+                <div className="px-3 py-4 text-center text-xs text-neutral-400">
+                  No models available. Check Ollama or add API keys.
+                </div>
+              )}
             </div>
           )}
         </div>

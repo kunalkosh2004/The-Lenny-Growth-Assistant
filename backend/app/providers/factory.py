@@ -95,9 +95,27 @@ def _build_provider(settings: Settings) -> LLMProvider:
             model=settings.openai_model,
         )
 
+    if name == "anthropic":
+        from app.providers.anthropic import AnthropicProvider
+
+        logger.info("Building Anthropic provider (model=%s)", settings.anthropic_model)
+        return AnthropicProvider(
+            api_key=settings.anthropic_api_key or "",
+            model=settings.anthropic_model,
+        )
+
+    if name == "google":
+        from app.providers.google import GoogleProvider
+
+        logger.info("Building Google provider (model=%s)", settings.google_model)
+        return GoogleProvider(
+            api_key=settings.google_api_key or "",
+            model=settings.google_model,
+        )
+
     raise ProviderError(
         f"Unknown LLM_PROVIDER '{settings.llm_provider}'. "
-        "Supported values: ollama, openai."
+        "Supported values: ollama, openai, anthropic, google."
     )
 
 
@@ -108,7 +126,7 @@ def list_available_providers(settings: Settings) -> list[dict]:
     display all providers and their connection status.
     """
     providers_info: list[dict] = []
-    candidate_names = ["ollama", "openai"]
+    candidate_names = ["ollama", "openai", "anthropic", "google"]
 
     for name in candidate_names:
         test_settings = Settings(

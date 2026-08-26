@@ -103,14 +103,17 @@ export type Ship30Response = {
 
 export type OllamaModel = {
   name: string;
-  size: number;
-  parameter_size: string;
+  size?: number;
+  parameter_size?: string;
   family: string;
   context_length: number;
-  is_embedding: boolean;
+  is_embedding?: boolean;
+  provider?: string;
+  available?: boolean;
 };
 
 export type OllamaModelsResponse = {
   generation_models: OllamaModel[];
   embedding_models: OllamaModel[];
+  cloud_models: OllamaModel[];
 };
