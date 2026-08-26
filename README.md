@@ -3,14 +3,18 @@
 An evaluator-friendly full-stack AI product for asking grounded product and
 growth questions over a local Lenny's Podcast transcript knowledge base.
 
-Current state: Milestone 1 foundation is in progress. The repository now has a
-real FastAPI backend, a Next.js app shell, Docker foundations, and the core
-planning docs. Retrieval, sessions, providers, and artifact generation arrive in
-later milestones.
+Current state: Milestone 2 persistence is complete. The repository has a
+real FastAPI backend with health and session APIs, Alembic migrations,
+PostgreSQL models for sessions/messages/artifacts, a Next.js app shell,
+Docker foundations, and the core planning docs. Transcript ingestion,
+retrieval, providers, and artifact generation arrive in later milestones.
 
 ## Features
 
 - Health and readiness API endpoints.
+- Session and message persistence APIs.
+- PostgreSQL models for users, chat sessions, messages, and artifacts.
+- Alembic migrations for schema management.
 - Three-panel product shell: session sidebar, chat workspace, artifact viewer.
 - PostgreSQL + pgvector Docker foundation.
 - Environment-driven configuration.
@@ -92,13 +96,23 @@ Important variables:
 
 ## Database Setup
 
-Milestone 1 provides Docker Compose with a pgvector-enabled PostgreSQL service.
-Schema migrations begin in Milestone 2.
+Milestone 2 adds Alembic migrations and PostgreSQL models for sessions,
+messages, and artifacts.
 
 ```bash
-docker compose config
-docker compose up postgres
+docker compose up postgres -d
+cd backend
+uv run alembic upgrade head
 ```
+
+If port `5432` is already in use locally, set an alternate host port before
+starting PostgreSQL:
+
+```bash
+POSTGRES_PORT=5434 docker compose up postgres -d
+```
+
+Then point `DATABASE_URL` at that port for migrations and local API runs.
 
 ## Ollama Setup
 
@@ -139,6 +153,22 @@ Backend health:
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/health/ready
+```
+
+Session API examples:
+
+```bash
+curl -X POST http://localhost:8000/api/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Retention strategy"}'
+
+curl http://localhost:8000/api/sessions
+
+curl -X POST http://localhost:8000/api/sessions/<session-id>/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"role":"user","content":"How do guests describe PMF?"}'
+
+curl http://localhost:8000/api/sessions/<session-id>
 ```
 
 Frontend:
@@ -184,6 +214,8 @@ npm run build
 
 - **Database unavailable:** confirm PostgreSQL is running and `DATABASE_URL` is
   correct.
+- **Port 5432 already in use:** start Compose with `POSTGRES_PORT=5434` (or
+  another free port) and update `DATABASE_URL` accordingly.
 - **Ollama unavailable:** confirm Ollama is installed, running, and has the
   configured model.
 - **Missing cloud key:** set `OPENAI_API_KEY` or use `LLM_PROVIDER=ollama`.
@@ -211,7 +243,8 @@ agent-transcripts/    Milestone development logs
 
 ## Known Limitations
 
-- Milestone 1 has no session persistence, ingestion, retrieval, or generation.
+- Milestone 2 persists sessions and messages, but chat is not yet grounded in
+  transcript retrieval.
 - Readiness can report degraded until PostgreSQL is running.
 - Frontend chat controls are a non-persistent foundation shell for now.
 

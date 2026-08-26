@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "FastAPI backend for The Lenny Growth Assistant."
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.14.0",
     "fastapi>=0.115.0",
     "pydantic-settings>=2.5.0",
     "sqlalchemy>=2.0.35",
@@ -28,3 +29,7 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/api/*.py" = ["B008"]
+"alembic/versions/*.py" = ["E501"]

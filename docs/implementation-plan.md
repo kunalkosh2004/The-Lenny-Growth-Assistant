@@ -148,4 +148,5 @@ continuing.
 - [x] Define ingestion and retrieval strategy.
 - [x] Define milestone sequence.
 - [x] Document assumptions and risks.
-- [ ] Build Milestone 1 foundation after approval.
+- [x] Build Milestone 1 foundation after approval.
+- [x] Build Milestone 2 persistence after approval.

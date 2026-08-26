@@ -7,10 +7,17 @@
   provider status, composer, and artifact viewer.
 - Validate Docker Compose parses successfully.
 
+## Milestone 2
+
+- Start PostgreSQL and run `uv run alembic upgrade head`.
+- Confirm `GET /health/ready` reports database readiness as `ready`.
+- Create a session with `POST /api/sessions`.
+- Append user and assistant messages with `POST /api/sessions/{id}/messages`.
+- Fetch session history with `GET /api/sessions/{id}` and confirm message order.
+- Create a second session and confirm histories remain independent.
+
 ## Future Milestones
 
-- Create a new chat.
-- Switch between independent sessions.
 - Ask a grounded product question and inspect citations.
 - Ask a follow-up question and verify prior context is used.
 - Configure Ollama and verify provider status.

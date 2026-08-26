@@ -44,16 +44,22 @@ The backend is a FastAPI app organized around:
 
 ## Database
 
-Milestone 2 will add SQLAlchemy models for users, chat sessions, messages, and
-artifacts. Milestone 3 will add transcript documents and chunks with pgvector
-embeddings and source metadata.
+Milestone 2 added SQLAlchemy models and Alembic migrations for users, chat
+sessions, messages, and artifacts. Milestone 3 will add transcript documents and
+chunks with pgvector embeddings and source metadata.
 
 ## Initial API Surface
 
 - `GET /health`: process health.
 - `GET /health/ready`: dependency readiness, beginning with database status.
+- `POST /api/sessions`: create a chat session.
+- `GET /api/sessions`: list chat sessions.
+- `GET /api/sessions/{session_id}`: fetch a session with message history.
+- `PATCH /api/sessions/{session_id}`: update a session title.
+- `POST /api/sessions/{session_id}/messages`: append a message.
+- `GET /api/sessions/{session_id}/messages`: list session messages.
 
-Later milestones will add sessions, chat, providers, artifacts, ingestion, and
+Later milestones will add chat generation, providers, artifacts, ingestion, and
 retrieval endpoints.
 
 ## Knowledge Pipeline
