@@ -6,10 +6,10 @@ import SessionSidebar from "@/components/SessionSidebar";
 import ChatMessage from "@/components/ChatMessage";
 import ArtifactViewer from "@/components/ArtifactViewer";
 import {
+  createSession,
   getSession,
   sendChat,
   generateArtifact,
-  listSessionArtifacts,
 } from "@/lib/api";
 import type {
   ArtifactStored,
@@ -156,6 +156,62 @@ export default function Home() {
     setShowArtifacts(false);
   };
 
+  /** Create a new session and immediately send the given message. */
+  const handleSuggestion = async (question: string) => {
+    try {
+      const session = await createSession();
+      setActiveSessionId(session.id);
+      // Small delay so the session state settles before sending.
+      setInput(question);
+      // Send after a tick so activeSessionId is set.
+      setTimeout(async () => {
+        setSending(true);
+        const tempUserMsg: DisplayMessage = {
+          id: `temp-${Date.now()}`,
+          session_id: session.id,
+          role: "user",
+          content: question,
+          metadata: {},
+          created_at: new Date().toISOString(),
+        };
+        setMessages([tempUserMsg]);
+        setInput("");
+        try {
+          const response: ChatApiResponse = await sendChat(
+            session.id,
+            question,
+          );
+          setMessages([
+            { ...tempUserMsg, id: `user-${response.message.id}` },
+            {
+              ...response.message,
+              sources: response.sources,
+              groundingStatus: response.grounding_status,
+            },
+          ]);
+        } catch {
+          setMessages([
+            tempUserMsg,
+            {
+              id: `error-${Date.now()}`,
+              session_id: session.id,
+              role: "assistant",
+              content:
+                "Failed to get a response. Please check that the backend is running and the LLM provider is available.",
+              metadata: {},
+              created_at: new Date().toISOString(),
+              groundingStatus: "error",
+            },
+          ]);
+        } finally {
+          setSending(false);
+        }
+      }, 50);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <main className="h-screen bg-paper text-ink">
       <div className="grid h-screen grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_420px]">
@@ -219,9 +275,7 @@ export default function Home() {
                   ].map((q) => (
                     <button
                       key={q}
-                      onClick={() => {
-                        setInput(q);
-                      }}
+                      onClick={() => handleSuggestion(q)}
                       className="rounded-md border border-line bg-white px-3 py-2 text-xs text-neutral-600 hover:bg-paper"
                     >
                       {q}
