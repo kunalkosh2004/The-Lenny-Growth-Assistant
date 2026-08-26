@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronDown, Loader2, MessageSquarePlus } from "lucide-react";
 import {
-  MessageSquarePlus,
-  Trash2,
-} from "lucide-react";
-import { createSession, listSessions, listProviders } from "@/lib/api";
-import type { ProviderInfo, SessionSummary } from "@/types/api";
+  createSession,
+  listSessions,
+  listProviders,
+  listOllamaModels,
+  selectProvider,
+} from "@/lib/api";
+import type {
+  OllamaModel,
+  ProviderInfo,
+  SessionSummary,
+} from "@/types/api";
 
 export default function SessionSidebar({
   activeSessionId,
@@ -22,6 +29,11 @@ export default function SessionSidebar({
   const [activeProvider, setActiveProvider] = useState("ollama");
   const [activeModel, setActiveModel] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Ollama model list
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   const refresh = async () => {
     try {
@@ -40,11 +52,28 @@ export default function SessionSidebar({
     }
   };
 
+  // Fetch Ollama models when provider is ollama
+  const refreshModels = async () => {
+    try {
+      const data = await listOllamaModels();
+      setOllamaModels(data.generation_models || []);
+    } catch {
+      setOllamaModels([]);
+    }
+  };
+
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 15000);
-    return () => clearInterval(interval);
+    if (activeProvider === "ollama") {
+      refreshModels();
+    }
   }, []);
+
+  useEffect(() => {
+    if (activeProvider === "ollama") {
+      refreshModels();
+    }
+  }, [activeProvider]);
 
   const handleNewChat = async () => {
     try {
@@ -54,6 +83,23 @@ export default function SessionSidebar({
       onNewChat();
     } catch {
       // ignore
+    }
+  };
+
+  const handleModelSwitch = async (modelName: string) => {
+    setSwitching(true);
+    setShowModelDropdown(false);
+    try {
+      const result = await selectProvider(activeProvider, modelName);
+      setActiveModel(result.active_model);
+      // Re-fetch provider status
+      const prov = await listProviders();
+      setProviders(prov.providers || []);
+      setActiveProvider(prov.active_provider || "ollama");
+    } catch {
+      // ignore
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -78,13 +124,66 @@ export default function SessionSidebar({
         </button>
       </div>
 
-      {/* Provider status */}
+      {/* Provider status with model dropdown */}
       <div className="mt-6 rounded-md border border-line bg-paper p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
           Model Provider
         </p>
         <p className="mt-2 text-sm font-medium capitalize">{activeProvider}</p>
-        <p className="mt-0.5 truncate text-xs text-neutral-600">{activeModel}</p>
+
+        {/* Model selector dropdown */}
+        <div className="relative mt-2">
+          <button
+            onClick={() => {
+              if (!switching && ollamaModels.length > 0) {
+                setShowModelDropdown(!showModelDropdown);
+              }
+            }}
+            disabled={switching || ollamaModels.length === 0}
+            className="flex w-full items-center justify-between gap-2 rounded-md border border-line bg-white px-3 py-2 text-left text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          >
+            {switching ? (
+              <span className="flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin" />
+                Switching...
+              </span>
+            ) : (
+              <span className="truncate">
+                {activeModel || "No model selected"}
+              </span>
+            )}
+            {ollamaModels.length > 0 && !switching && (
+              <ChevronDown
+                size={14}
+                className={`shrink-0 text-neutral-400 transition-transform ${
+                  showModelDropdown ? "rotate-180" : ""
+                }`}
+              />
+            )}
+          </button>
+
+          {showModelDropdown && ollamaModels.length > 0 && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-[260px] overflow-y-auto rounded-md border border-line bg-white shadow-lg">
+              {ollamaModels.map((model) => (
+                <button
+                  key={model.name}
+                  onClick={() => handleModelSwitch(model.name)}
+                  className={`flex w-full flex-col px-3 py-2 text-left text-xs hover:bg-accent/5 ${
+                    model.name === activeModel ? "bg-accent/10 font-medium" : ""
+                  }`}
+                >
+                  <span className="truncate font-medium text-neutral-800">
+                    {model.name}
+                  </span>
+                  <span className="mt-0.5 text-[10px] text-neutral-400">
+                    {model.parameter_size} · {model.family} · ctx {model.context_length.toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="mt-2 flex items-center gap-1.5">
           <span
             className={`inline-block h-2 w-2 rounded-full ${

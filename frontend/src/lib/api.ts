@@ -6,6 +6,7 @@ import type {
   ChatApiResponse,
   HealthResponse,
   KnowledgeStatus,
+  OllamaModelsResponse,
   ProvidersResponse,
   SessionDetail,
   SessionSummary,
@@ -91,12 +92,17 @@ export async function listProviders(): Promise<ProvidersResponse> {
   return request<ProvidersResponse>("/api/providers");
 }
 
+export async function listOllamaModels(): Promise<OllamaModelsResponse> {
+  return request<OllamaModelsResponse>("/api/providers/models");
+}
+
 export async function selectProvider(
   provider: string,
-): Promise<{ active_provider: string; active_model: string }> {
+  model?: string,
+): Promise<{ active_provider: string; active_model: string; info: Record<string, unknown> }> {
   return request("/api/providers/select", {
     method: "POST",
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider, model: model ?? null }),
   });
 }
 
