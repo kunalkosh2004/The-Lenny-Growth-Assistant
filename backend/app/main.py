@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
 from app.api.knowledge import router as knowledge_router
+from app.api.providers import router as providers_router
 from app.api.sessions import router as sessions_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(knowledge_router)
+    app.include_router(providers_router)
     app.include_router(sessions_router)
     return app
 
