@@ -3,6 +3,26 @@
 import { X, FileText, Code } from "lucide-react";
 import type { ArtifactStored } from "@/types/api";
 
+/**
+ * Extract a fenced ```lang ... ``` code block's contents, if present anywhere
+ * in the text — some LLMs add commentary before/after the fence despite
+ * instructions not to, so this doesn't require the whole string to be the
+ * fence. Defensive fallback for artifacts generated before the backend
+ * started stripping fences at generation time.
+ */
+function stripCodeFence(content: string): string {
+  const match = content.match(/```[a-zA-Z0-9]*\s*\n([\s\S]*?)\n```/);
+  return (match ? match[1] : content).trim();
+}
+
+/** Extract just the <html>...</html> document, discarding any prose the LLM added around it. */
+function extractHtmlDocument(content: string): string {
+  const doctypeMatch = content.match(/<!DOCTYPE html[\s\S]*?<\/html>/i);
+  if (doctypeMatch) return doctypeMatch[0].trim();
+  const htmlMatch = content.match(/<html[\s\S]*?<\/html>/i);
+  return htmlMatch ? htmlMatch[0].trim() : content;
+}
+
 function renderMarkdown(content: string): string {
   // Simple markdown → HTML conversion for display.
   // In production, use a proper library like react-markdown.
@@ -35,7 +55,7 @@ function MarkdownViewer({ content }: { content: string }) {
   return (
     <div
       className="prose prose-sm max-w-none text-sm"
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(stripCodeFence(content)) }}
     />
   );
 }
@@ -55,7 +75,7 @@ function HTMLViewer({ content }: { content: string }) {
         </span>
       </div>
       <iframe
-        srcDoc={content}
+        srcDoc={extractHtmlDocument(stripCodeFence(content))}
         sandbox="allow-same-origin"
         className="h-[500px] w-full"
         title="Artifact preview"
@@ -94,7 +114,7 @@ export default function ArtifactViewer({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {artifact.type === "html" ? (
           <HTMLViewer content={artifact.content} />
         ) : (

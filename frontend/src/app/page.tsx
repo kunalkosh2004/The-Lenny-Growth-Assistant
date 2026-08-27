@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Sparkles } from "lucide-react";
+import { Send, Loader2, Sparkles, FileText, Code2 } from "lucide-react";
 import SessionSidebar from "@/components/SessionSidebar";
 import ChatMessage from "@/components/ChatMessage";
 import ArtifactViewer from "@/components/ArtifactViewer";
@@ -11,9 +11,12 @@ import {
   sendChat,
   updateSession,
   generateArtifact,
+  listSessionArtifacts,
+  getArtifact,
 } from "@/lib/api";
 import type {
   ArtifactStored,
+  ArtifactListResponse,
   ChatApiResponse,
   MessageResponse,
   Source,
@@ -38,7 +41,19 @@ export default function Home() {
     "markdown",
   );
   const [generatingArtifact, setGeneratingArtifact] = useState(false);
+  const [artifactHistory, setArtifactHistory] = useState<
+    ArtifactListResponse["artifacts"]
+  >([]);
+  const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(
+    null,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const refreshArtifactHistory = useCallback((sessionId: string) => {
+    listSessionArtifacts(sessionId)
+      .then((res) => setArtifactHistory(res.artifacts))
+      .catch(() => setArtifactHistory([]));
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -52,6 +67,8 @@ export default function Home() {
   useEffect(() => {
     if (!activeSessionId) {
       setMessages([]);
+      setArtifactHistory([]);
+      setActiveArtifact(null);
       return;
     }
     getSession(activeSessionId)
@@ -64,7 +81,9 @@ export default function Home() {
         setMessages(display);
       })
       .catch(() => setMessages([]));
-  }, [activeSessionId]);
+    setActiveArtifact(null);
+    refreshArtifactHistory(activeSessionId);
+  }, [activeSessionId, refreshArtifactHistory]);
 
   const handleSend = async () => {
     if (!input.trim() || !activeSessionId || sending) return;
@@ -140,16 +159,27 @@ export default function Home() {
         request: artifactRequest.trim(),
       });
       // Fetch the stored artifact for viewing.
-      const stored = await import("@/lib/api").then((m) =>
-        m.getArtifact(result.artifact_id),
-      );
+      const stored = await getArtifact(result.artifact_id);
       setActiveArtifact(stored);
       setShowArtifacts(true);
       setArtifactRequest("");
+      refreshArtifactHistory(activeSessionId);
     } catch {
       // ignore
     } finally {
       setGeneratingArtifact(false);
+    }
+  };
+
+  const handleOpenArtifact = async (artifactId: string) => {
+    setLoadingArtifactId(artifactId);
+    try {
+      const stored = await getArtifact(artifactId);
+      setActiveArtifact(stored);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingArtifactId(null);
     }
   };
 
@@ -163,6 +193,7 @@ export default function Home() {
   const handleNewChat = () => {
     setMessages([]);
     setActiveArtifact(null);
+    setArtifactHistory([]);
     setShowArtifacts(false);
   };
 
@@ -230,7 +261,7 @@ export default function Home() {
     <main className="h-screen bg-paper text-ink">
       <div className="grid h-screen grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_420px]">
         {/* Sidebar */}
-        <div className="hidden lg:block">
+        <div className="hidden h-screen min-h-0 overflow-hidden lg:block">
           <SessionSidebar
             activeSessionId={activeSessionId}
             onSelectSession={setActiveSessionId}
@@ -239,7 +270,7 @@ export default function Home() {
         </div>
 
         {/* Chat area */}
-        <section className="flex min-h-0 flex-col border-b border-line bg-paper lg:border-b-0 lg:border-r">
+        <section className="flex h-screen min-h-0 flex-col overflow-hidden border-b border-line bg-paper lg:border-b-0 lg:border-r">
           {/* Chat header */}
           <header className="flex shrink-0 items-center justify-between border-b border-line px-6 py-4">
             <div>
@@ -268,7 +299,7 @@ export default function Home() {
           </header>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
             {!activeSessionId && (
               <div className="flex h-full flex-col items-center justify-center text-center">
                 <div className="rounded-full bg-accent/10 p-4">
@@ -366,14 +397,51 @@ export default function Home() {
 
         {/* Artifact panel */}
         {showArtifacts && (
-          <div className="hidden lg:flex lg:flex-col">
+          <div className="hidden h-screen min-h-0 overflow-hidden lg:flex lg:flex-col">
             {activeArtifact ? (
               <ArtifactViewer
                 artifact={activeArtifact}
                 onClose={() => setActiveArtifact(null)}
               />
             ) : (
-              <div className="flex h-full flex-col bg-white p-5">
+              <div className="flex h-full flex-col overflow-y-auto bg-white p-5">
+                {artifactHistory.length > 0 && (
+                  <div className="mb-5">
+                    <h3 className="text-sm font-semibold">Artifact History</h3>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Previously generated artifacts in this chat.
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                      {artifactHistory.map((a) => (
+                        <li key={a.id}>
+                          <button
+                            onClick={() => handleOpenArtifact(a.id)}
+                            disabled={loadingArtifactId === a.id}
+                            className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left text-xs hover:bg-paper disabled:opacity-50"
+                          >
+                            {a.type === "html" ? (
+                              <Code2 size={14} className="shrink-0 text-accent" />
+                            ) : (
+                              <FileText size={14} className="shrink-0 text-accent" />
+                            )}
+                            <span className="flex-1 truncate font-medium text-ink">
+                              {a.title}
+                            </span>
+                            {loadingArtifactId === a.id ? (
+                              <Loader2 size={12} className="shrink-0 animate-spin" />
+                            ) : (
+                              <span className="shrink-0 text-neutral-400">
+                                {new Date(a.created_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-4 border-t border-line pt-4" />
+                  </div>
+                )}
+
                 <h3 className="text-sm font-semibold">Generate Artifact</h3>
                 <p className="mt-1 text-xs text-neutral-500">
                   Create a Markdown or HTML/CSS document from transcript

@@ -270,7 +270,7 @@ export default function SessionSidebar({
       </div>
 
       {/* Session list */}
-      <nav className="mt-6 flex-1 space-y-1 overflow-y-auto" aria-label="Chat sessions">
+      <nav className="mt-6 min-h-0 flex-1 space-y-1 overflow-y-auto" aria-label="Chat sessions">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
           Chats
         </p>

@@ -1,8 +1,30 @@
 "use client";
 
 import type { MessageResponse, Source } from "@/types/api";
-import { User, Bot, AlertTriangle } from "lucide-react";
+import { User, Bot, AlertTriangle, Cpu, Cloud } from "lucide-react";
 import SourceCard from "./SourceCard";
+
+const PROVIDER_LABELS: Record<string, string> = {
+  ollama: "Local (Ollama)",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  google: "Gemini",
+};
+
+function ProviderBadge({ provider, model }: { provider: string; model: string }) {
+  if (!provider) return null;
+  const label = PROVIDER_LABELS[provider.toLowerCase()] ?? provider;
+  const isLocal = provider.toLowerCase() === "ollama";
+  return (
+    <div className="mt-1.5 flex justify-end">
+      <span className="inline-flex items-center gap-1 rounded-full border border-line bg-paper px-2 py-0.5 text-[10px] text-neutral-500">
+        {isLocal ? <Cpu size={10} /> : <Cloud size={10} />}
+        {label}
+        {model && <span className="text-neutral-400">· {model}</span>}
+      </span>
+    </div>
+  );
+}
 
 export default function ChatMessage({
   message,
@@ -72,11 +94,12 @@ export default function ChatMessage({
           </div>
         )}
 
-        {/* Model info */}
+        {/* Provider/model badge */}
         {!isUser && message.metadata && (
-          <p className="mt-1 text-[10px] text-neutral-400">
-            {String(message.metadata.provider || "")}/{String(message.metadata.model || "")}
-          </p>
+          <ProviderBadge
+            provider={String(message.metadata.provider || "")}
+            model={String(message.metadata.model || "")}
+          />
         )}
       </div>
 
