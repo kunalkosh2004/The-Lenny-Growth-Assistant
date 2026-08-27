@@ -15,7 +15,6 @@ echo "=== The Lenny Growth Assistant ==="
 echo ""
 
 # Check PostgreSQL
-# Check PostgreSQL
 echo "Checking PostgreSQL on port 5434..."
 
 if ! docker compose exec -T postgres pg_isready -U lenny -d lenny_growth_assistant > /dev/null 2>&1; then
