@@ -9,13 +9,14 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
   set +a
 fi
 
-export DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:5434/lenny_growth_assistant"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+export DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:${POSTGRES_PORT}/lenny_growth_assistant"
 
 echo "=== The Lenny Growth Assistant ==="
 echo ""
 
 # Check PostgreSQL
-echo "Checking PostgreSQL on port 5434..."
+echo "Checking PostgreSQL on port ${POSTGRES_PORT}..."
 
 if ! docker compose exec -T postgres pg_isready -U lenny -d lenny_growth_assistant > /dev/null 2>&1; then
   echo "❌ PostgreSQL is not running. Starting it..."

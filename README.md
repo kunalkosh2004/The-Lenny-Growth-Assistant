@@ -76,7 +76,7 @@ See [architecture.md](architecture.md) for detailed design decisions.
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 3     |
 | Backend  | Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic   |
 | Database | PostgreSQL 16, pgvector                                |
-| AI       | Ollama (local), OpenAI (cloud)                         |
+| AI       | Ollama (local, mandatory), OpenAI, Anthropic, Google Gemini |
 | Testing  | pytest (backend), TypeScript strict mode (frontend)    |
 | Deploy   | Docker Compose                                         |
 
@@ -87,68 +87,114 @@ See [architecture.md](architecture.md) for detailed design decisions.
 - Docker and Docker Compose
 - Ollama (for local LLM demo)
 
-## Quick Start
+## Getting Started (From Scratch)
+
+Everything below has been run end-to-end and verified working, including a
+clean `docker compose up --build` with no prior local setup.
+
+### 0. Install Ollama first (needed by both paths below)
+
+The demo is required to run locally on Ollama — do this before anything else:
 
 ```bash
-# 1. Clone the repository
-git clone <repository-url>
-cd lenny-growth-assistant
+# macOS/Linux
+curl -fsSL https://ollama.com/install.sh | sh
 
-# 2. Copy environment file
+# Pull the models this project uses
+ollama pull nomic-embed-text   # embeddings, required for ingestion + retrieval
+ollama pull qwen2.5:3b         # generation — small, fast, works well on a laptop CPU
+# llama3.1:8b also works (set as OLLAMA_MODEL) but is noticeably slower on CPU-only machines
+```
+
+### 1. Clone and configure
+
+```bash
+git clone https://github.com/kunalkosh2004/The-Lenny-Growth-Assistant.git
+cd The-Lenny-Growth-Assistant
 cp .env.example .env
+```
 
-# 3. Start PostgreSQL
-docker compose up postgres -d
+`.env.example` ships with safe local defaults — nothing else is required to
+run the local-Ollama demo. Cloud provider keys (`OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`) are optional; leave them blank to stay
+fully local.
 
-# 4. Install backend dependencies
+### 2. Get the transcript knowledge base
+
+The app needs Lenny's Podcast transcripts on disk before it has anything to
+ground answers in:
+
+```bash
+git clone --depth 1 https://github.com/ChatPRD/lennys-podcast-transcripts.git \
+  knowledge-source/lennys-podcast-transcripts
+```
+
+### Option A — Docker Compose (recommended, one command)
+
+```bash
+docker compose up --build
+```
+
+This builds and starts PostgreSQL (with pgvector), the backend, and the
+frontend together. Database migrations run automatically as part of the
+backend container's startup — no separate migration step needed. Once it's
+up:
+
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000 (`/health`, `/health/ready`)
+
+Then ingest transcripts from a separate terminal (this talks to the
+dockerized Postgres over its published port, and to Ollama on the host —
+neither needs to run inside a container):
+
+```bash
+cd backend
+uv sync --all-groups
+DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:5432/lenny_growth_assistant" \
+  uv run python ../scripts/ingest_transcripts.py --limit 15   # drop --limit for the full 303-episode set
+```
+
+### Option B — Native local dev (faster iteration while coding)
+
+```bash
+# Backend deps
 cd backend
 uv sync --all-groups
 
-# 5. Run database migrations
+# Start Postgres only (still via Docker)
+cd ..
+docker compose up postgres -d
+
+# Run migrations and ingest
+cd backend
 uv run alembic upgrade head
+uv run python ../scripts/ingest_transcripts.py --limit 15
 
-# 6. Start the backend
-uv run uvicorn app.main:app --reload
-
-# 7. In a separate terminal, install and start the frontend
-cd frontend
-npm install
-npm run dev
+# Start the backend + frontend together
+cd ..
+./start.sh          # backend on :8001, checks Postgres/Ollama first
+# in a second terminal:
+cd frontend && npm install && npm run dev   # frontend on :3000
 ```
 
-## Transcript Setup
+`start.sh` is the script actually used during development of this project —
+it sources `.env`, verifies Postgres and Ollama are reachable before
+starting, and prints which cloud providers have keys configured. Prefer it
+over hand-rolling a raw `uvicorn` command; it avoids an env-loading footgun
+(pydantic-settings looks for `.env` relative to the process's working
+directory, not the repo root, so a bare `uv run uvicorn ...` from `backend/`
+can silently miss root-level `.env` values unless `start.sh`'s explicit
+`source .env` step runs first).
 
-The knowledge base requires Lenny's Podcast transcripts:
+### 3. Verify it's working
 
 ```bash
-# Clone the transcript repository
-git clone --depth 1 https://github.com/ChatPRD/lennys-podcast-transcripts.git \
-  knowledge-source/lennys-podcast-transcripts
-
-# Validate transcript source
-./backend/.venv/bin/python scripts/validate_transcripts.py
-
-# Ingest transcripts into the knowledge base (requires Ollama)
-DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:5432/lenny_growth_assistant" \
-  EMBEDDING_PROVIDER=ollama \
-  ./backend/.venv/bin/python scripts/ingest_transcripts.py
-
-# For faster verification, ingest a subset
-./backend/.venv/bin/python scripts/ingest_transcripts.py --limit 10
+curl http://localhost:8001/health/ready   # Option B; use :8000 for Option A
 ```
 
-## Ollama Setup
-
-```bash
-# Install Ollama (macOS/Linux)
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull required models
-ollama pull nomic-embed-text    # Embeddings (768 dims)
-ollama pull llama3.1:8b         # Generation (recommended)
-# or
-ollama pull qwen2.5-coder:1.5b  # Smaller/faster alternative
-```
+Then open the frontend, start a new chat, and ask something like *"How
+should startups improve retention?"* — you should get a grounded answer with
+source citations, and the sidebar should show Ollama as connected.
 
 ## API Endpoints
 
@@ -180,16 +226,6 @@ TEST_DATABASE_URL="postgresql+psycopg://lenny:lenny_dev_password@localhost:5432/
 # Frontend
 cd frontend
 npx tsc --noEmit
-```
-
-## Docker Compose
-
-```bash
-# Start all services
-docker compose up --build
-
-# Start only PostgreSQL
-docker compose up postgres -d
 ```
 
 ## Troubleshooting
