@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 # How many prior user/assistant turns to include as conversation context.
 MAX_CONTEXT_TURNS = 10
 
+NO_EVIDENCE_MESSAGE = (
+    "I don't have enough information in the available Lenny's Podcast "
+    "transcripts to answer that question confidently. The knowledge base "
+    "doesn't contain sufficient evidence on this topic."
+)
+
 SYSTEM_PROMPT = """\
 You are The Lenny Growth Assistant, an AI assistant that answers product
 management and growth questions using knowledge from Lenny's Podcast
@@ -148,7 +154,14 @@ class ChatService:
             .limit(limit * 2)  # user + assistant pairs
         )
         messages = list(reversed(list(self.db.scalars(stmt).all())))
-        return [{"role": m.role, "content": m.content} for m in messages]
+        return [
+            {
+                "role": m.role,
+                "content": m.content,
+                "grounded": bool((m.message_metadata or {}).get("sources")),
+            }
+            for m in messages
+        ]
 
     def _format_history(self, history: list[dict]) -> str:
         if not history:
@@ -225,6 +238,19 @@ class ChatService:
         except Exception as exc:
             logger.warning("Retrieval failed: %s", exc)
             chunks = []
+
+        # If nothing relevant was retrieved and there's no prior *grounded*
+        # exchange to fall back on for a follow-up, refuse deterministically
+        # rather than trusting the LLM to notice the context is irrelevant
+        # (smaller local models are unreliable at this — see grounding rule
+        # 2 in SYSTEM_PROMPT). A prior refusal doesn't count — otherwise
+        # repeating the same off-topic question would slip past this check
+        # on the second try, since `history` already includes that reply.
+        has_prior_grounded_turn = any(
+            m["role"] == "assistant" and m["grounded"] for m in history
+        )
+        if not chunks and not has_prior_grounded_turn:
+            return ChatResponse(content=NO_EVIDENCE_MESSAGE, sources=[])
 
         # 3. Build the grounded prompt.
         history_text = self._format_history(history)

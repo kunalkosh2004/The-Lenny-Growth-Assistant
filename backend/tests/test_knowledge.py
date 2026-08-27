@@ -227,6 +227,10 @@ def _ingest_settings(**overrides) -> Settings:
         chunk_target_chars=400,
         chunk_overlap_chars=50,
         ingestion_batch_size=16,
+        # The fake embedding provider produces hash-based vectors unrelated
+        # to real semantic similarity, so the production relevance
+        # threshold would flakily filter out matches in these tests.
+        retrieval_min_score=0.0,
     )
     defaults.update(overrides)
     return Settings(**defaults)
@@ -334,6 +338,7 @@ def client_with_knowledge_overrides(
         database_url="unused",
         transcripts_dir=str(FIXTURES_DIR),
         embedding_provider="ollama",
+        retrieval_min_score=0.0,
         app_env="test",
         log_level="WARNING",
     )

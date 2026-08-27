@@ -15,11 +15,19 @@ echo "=== The Lenny Growth Assistant ==="
 echo ""
 
 # Check PostgreSQL
+# Check PostgreSQL
 echo "Checking PostgreSQL on port 5434..."
-if ! docker exec lenny-postgres pg_isready -U lenny -d lenny_growth_assistant > /dev/null 2>&1; then
-  echo "❌ PostgreSQL is not running. Start it with: docker start lenny-postgres"
-  exit 1
+
+if ! docker compose exec -T postgres pg_isready -U lenny -d lenny_growth_assistant > /dev/null 2>&1; then
+  echo "❌ PostgreSQL is not running. Starting it..."
+  docker compose up -d postgres
+
+  echo "Waiting for PostgreSQL..."
+  until docker compose exec -T postgres pg_isready -U lenny -d lenny_growth_assistant > /dev/null 2>&1; do
+    sleep 1
+  done
 fi
+
 echo "✅ PostgreSQL is running"
 
 # Check Ollama
@@ -42,4 +50,4 @@ echo "Configured cloud providers:"
 echo ""
 echo "Starting backend on http://localhost:8001 ..."
 cd "$SCRIPT_DIR/backend"
-exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload --reload-exclude ".venv/*"

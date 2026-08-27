@@ -152,11 +152,19 @@ class OllamaProvider:
                 "chat-style prompts."
             )
 
+        # Ollama returns eval_count as an integer; normalize to a dict.
+        eval_count = data.get("eval_count", 0)
+        usage: dict = {
+            "prompt_tokens": data.get("prompt_eval_count", 0),
+            "completion_tokens": eval_count,
+            "total_tokens": data.get("prompt_eval_count", 0) + eval_count,
+        }
+
         return GenerateResult(
             content=content,
             model=self._model,
             provider=self.name,
-            usage=data.get("eval_count", {}),
+            usage=usage,
         )
 
     # ------------------------------------------------------------------

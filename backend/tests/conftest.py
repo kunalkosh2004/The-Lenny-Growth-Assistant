@@ -31,7 +31,7 @@ def _database_available(database_url: str) -> bool:
 def test_settings() -> Settings:
     database_url = os.getenv(
         "TEST_DATABASE_URL",
-        "postgresql+psycopg://lenny:lenny_dev_password@localhost:5432/lenny_growth_assistant",
+        "postgresql+psycopg://lenny:lenny_dev_password@localhost:5434/lenny_growth_assistant",
     )
     return Settings(
         database_url=database_url,
@@ -69,8 +69,10 @@ def db_session(migrated_database: str) -> Generator[Session, None, None]:
     connection = engine.connect()
     transaction = connection.begin()
 
-    # Start each test from a clean slate so manual/live data cannot leak into
-    # assertions. The surrounding transaction is rolled back afterwards.
+    # Start each test from a clean slate so real/manual usage data on the
+    # shared dev database cannot leak into assertions. This DELETE happens
+    # inside the transaction below and is rolled back afterwards, so it
+    # never touches persisted data.
     for table in ("messages", "chat_sessions", "users"):
         connection.execute(text(f"DELETE FROM {table}"))
 

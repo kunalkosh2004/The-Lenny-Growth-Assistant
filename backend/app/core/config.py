@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     # Chunking: target characters per chunk and overlap between neighbors.
     chunk_target_chars: int = 1200
     chunk_overlap_chars: int = 150
+
+    # Minimum cosine-similarity score (0-1) for a retrieved chunk to be
+    # considered relevant. Chunks below this are dropped before grounding,
+    # so an off-topic question yields no context deterministically instead
+    # of relying on the LLM to notice the context is unrelated.
+    retrieval_min_score: float = 0.5
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     model_config = SettingsConfigDict(

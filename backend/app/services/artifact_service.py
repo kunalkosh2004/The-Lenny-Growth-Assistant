@@ -135,6 +135,33 @@ class ArtifactService:
             })
         return sources
 
+    def _strip_code_fence(self, content: str) -> str:
+        """Extract a fenced ```lang ... ``` code block's contents, if present.
+
+        LLMs frequently wrap generated HTML/Markdown in a fenced code block
+        even when instructed to return raw content, sometimes with extra
+        commentary before/after the fence ("Here is the requested..."). This
+        searches for the first fenced block anywhere in the text rather than
+        requiring the whole response to be just the fence, so leading/
+        trailing prose gets discarded along with the fence markers.
+        """
+        match = re.search(r"```[a-zA-Z0-9]*\s*\n(.*?)\n```", content, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return content.strip()
+
+    def _extract_html_document(self, content: str) -> str:
+        """Extract just the <html>...</html> document, discarding any prose
+        commentary the LLM added before/after it (fenced or not).
+        """
+        match = re.search(r"<!DOCTYPE html.*?</html>", content, re.DOTALL | re.IGNORECASE)
+        if match:
+            return match.group(0).strip()
+        match = re.search(r"<html.*?</html>", content, re.DOTALL | re.IGNORECASE)
+        if match:
+            return match.group(0).strip()
+        return content
+
     def _extract_title(self, content: str, artifact_type: str) -> str:
         """Extract a title from the generated content."""
         if artifact_type == "markdown":
@@ -202,7 +229,9 @@ class ArtifactService:
             ChatMessage(role="user", content=user_prompt),
         ]
         result = self._llm.generate(messages, temperature=0.7, max_tokens=4096)
-        content = result.content
+        content = self._strip_code_fence(result.content)
+        if artifact_type == "html":
+            content = self._extract_html_document(content)
         title = self._extract_title(content, artifact_type)
 
         return ArtifactResult(

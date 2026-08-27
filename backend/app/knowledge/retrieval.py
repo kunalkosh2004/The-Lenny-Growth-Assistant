@@ -91,6 +91,10 @@ class RetrievalService:
         for chunk, distance_val in rows:
             # Convert cosine distance to similarity score: 1 - distance, clamped.
             score = max(0.0, 1.0 - (distance_val or 1.0))
+            if score < self.settings.retrieval_min_score:
+                # Rows are ordered by distance ascending (score descending),
+                # so every remaining row is also below threshold.
+                break
             results.append(
                 RetrievedChunk(
                     content=chunk.content,

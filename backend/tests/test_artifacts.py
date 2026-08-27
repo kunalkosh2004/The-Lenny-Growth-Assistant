@@ -135,7 +135,7 @@ class TestArtifactService:
         result = service.generate("html", "Create a landing page")
         assert result.artifact_type == "html"
         assert "<!DOCTYPE html>" in result.content
-        assert "Landing Page" in result.title
+        assert result.title == "Test Page"
 
     def test_invalid_type_raises(self) -> None:
         fake_llm = FakeLLMProvider()
@@ -269,6 +269,7 @@ def artifact_client(
         database_url="unused",
         transcripts_dir=str(FIXTURES_DIR),
         embedding_provider="fake",
+        retrieval_min_score=0.0,
         chunk_target_chars=400,
         chunk_overlap_chars=50,
         ingestion_batch_size=16,
@@ -283,7 +284,7 @@ def artifact_client(
     from app.services.session_service import SessionService
     svc = SessionService(db_session)
     session = svc.create_session(SessionCreateRequest(title="Artifact session"))
-    artifact_client._session_id = str(session.id)  # type: ignore[attr-defined]
+    session_id = str(session.id)
 
     def override_get_db() -> Generator[Session, None, None]:
         try:
@@ -294,21 +295,26 @@ def artifact_client(
     def override_get_settings() -> Settings:
         return settings
 
+    import app.api.artifacts as artifacts_mod
     import app.knowledge.embeddings as embeddings_mod
     import app.providers.factory as factory_mod
 
     old_emb = embeddings_mod.get_embedding_provider
     old_llm = factory_mod.get_llm_provider
+    old_artifacts_llm = artifacts_mod.get_llm_provider
     embeddings_mod.get_embedding_provider = lambda s: FAKE_EMBED
     factory_mod.get_llm_provider = lambda s=None: FAKE_LLM
+    artifacts_mod.get_llm_provider = lambda s=None: FAKE_LLM
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_settings] = override_get_settings
 
     with TestClient(app) as client:
+        client._session_id = session_id  # type: ignore[attr-defined]
         yield client
 
     factory_mod.get_llm_provider = old_llm
+    artifacts_mod.get_llm_provider = old_artifacts_llm
     embeddings_mod.get_embedding_provider = old_emb
     app.dependency_overrides.clear()
     reset_session_state()

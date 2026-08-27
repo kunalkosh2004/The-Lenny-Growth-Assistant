@@ -247,6 +247,7 @@ def skills_client(
         database_url="unused",
         transcripts_dir=str(FIXTURES_DIR),
         embedding_provider="fake",
+        retrieval_min_score=0.0,
         chunk_target_chars=400,
         chunk_overlap_chars=50,
         ingestion_batch_size=16,
@@ -265,13 +266,16 @@ def skills_client(
     def override_get_settings() -> Settings:
         return settings
 
+    import app.api.skills as skills_mod
     import app.knowledge.embeddings as embeddings_mod
     import app.providers.factory as factory_mod
 
     old_emb = embeddings_mod.get_embedding_provider
     old_llm = factory_mod.get_llm_provider
+    old_skills_llm = skills_mod.get_llm_provider
     embeddings_mod.get_embedding_provider = lambda s: FAKE_EMBED
     factory_mod.get_llm_provider = lambda s=None: FAKE_LLM
+    skills_mod.get_llm_provider = lambda s=None: FAKE_LLM
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_settings] = override_get_settings
@@ -280,6 +284,7 @@ def skills_client(
         yield client
 
     factory_mod.get_llm_provider = old_llm
+    skills_mod.get_llm_provider = old_skills_llm
     embeddings_mod.get_embedding_provider = old_emb
     app.dependency_overrides.clear()
     reset_session_state()

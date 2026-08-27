@@ -125,6 +125,7 @@ def chat_client(
         database_url="unused",
         transcripts_dir=str(FIXTURES_DIR),
         embedding_provider="fake",
+        retrieval_min_score=0.0,
         chunk_target_chars=400,
         chunk_overlap_chars=50,
         ingestion_batch_size=16,
@@ -144,9 +145,7 @@ def chat_client(
     from app.services.session_service import SessionService
     svc = SessionService(db_session_with_knowledge)
     session = svc.create_session(SessionCreateRequest(title="Test chat"))
-
-    # Store session ID for tests.
-    chat_client._session_id = str(session.id)  # type: ignore[attr-defined]
+    session_id = str(session.id)
 
     def override_get_db() -> Generator[Session, None, None]:
         try:
@@ -163,15 +162,20 @@ def chat_client(
     # Patch the providers for the chat service.
     import app.knowledge.embeddings as embeddings_mod
     import app.providers.factory as factory_mod
+    import app.services.chat_service as chat_service_mod
 
     old_embedding = embeddings_mod.get_embedding_provider
     old_llm = factory_mod.get_llm_provider
+    old_chat_llm = chat_service_mod.get_llm_provider
     embeddings_mod.get_embedding_provider = lambda s: FAKE_EMBED
     factory_mod.get_llm_provider = lambda s=None: FAKE_LLM
+    chat_service_mod.get_llm_provider = lambda s=None: FAKE_LLM
 
     with TestClient(app) as client:
+        client._session_id = session_id  # type: ignore[attr-defined]
         yield client
 
+    chat_service_mod.get_llm_provider = old_chat_llm
     factory_mod.get_llm_provider = old_llm
     embeddings_mod.get_embedding_provider = old_embedding
     app.dependency_overrides.clear()
@@ -190,6 +194,7 @@ class TestChatServiceUnit:
             database_url="unused",
             transcripts_dir=str(FIXTURES_DIR),
             embedding_provider="fake",
+        retrieval_min_score=0.0,
             llm_provider="fake",
         )
         svc = ChatService(db_session_with_knowledge, settings)
@@ -201,6 +206,7 @@ class TestChatServiceUnit:
             database_url="unused",
             transcripts_dir=str(FIXTURES_DIR),
             embedding_provider="fake",
+        retrieval_min_score=0.0,
             llm_provider="fake",
         )
         svc = ChatService(db_session_with_knowledge, settings)
@@ -214,6 +220,7 @@ class TestChatServiceUnit:
             database_url="unused",
             transcripts_dir=str(FIXTURES_DIR),
             embedding_provider="fake",
+        retrieval_min_score=0.0,
             llm_provider="fake",
         )
         svc = ChatService(db_session_with_knowledge, settings)
@@ -246,10 +253,18 @@ class TestChatServiceIntegration:
             database_url="unused",
             transcripts_dir=str(FIXTURES_DIR),
             embedding_provider="fake",
+        retrieval_min_score=0.0,
             llm_provider="fake",
         )
         FAKE_LLM._response = "Based on the transcripts, retention is important."
         FAKE_LLM._last_messages = []
+
+        # Ingest fixture transcripts so retrieval has real chunks to ground on.
+        ingest = IngestionService(
+            db_session_with_knowledge, settings,
+            embedding_provider=FAKE_EMBED,
+        )
+        ingest.run()
 
         from app.schemas.session import SessionCreateRequest as SCR
         from app.services.session_service import SessionService as SS
@@ -283,6 +298,7 @@ class TestChatServiceIntegration:
             database_url="unused",
             transcripts_dir=str(FIXTURES_DIR),
             embedding_provider="fake",
+        retrieval_min_score=0.0,
             llm_provider="fake",
         )
         from app.schemas.session import SessionCreateRequest as SCR

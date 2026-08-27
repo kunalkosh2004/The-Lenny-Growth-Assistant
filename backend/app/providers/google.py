@@ -107,6 +107,14 @@ class GoogleProvider:
             "generationConfig": {
                 "temperature": temperature,
                 "maxOutputTokens": max_tokens,
+                # Gemini 2.5 models spend part of maxOutputTokens on internal
+                # "thinking" before producing visible text, which can silently
+                # truncate longer completions (e.g. a full HTML+CSS document)
+                # well before the visible output looks anywhere near the
+                # limit. Disable it for this app's use cases (grounded Q&A,
+                # artifact/article generation), none of which need extended
+                # reasoning. Ignored harmlessly by models that don't support it.
+                "thinkingConfig": {"thinkingBudget": 0},
             },
         }
 
@@ -133,6 +141,14 @@ class GoogleProvider:
         parts = candidates[0].get("content", {}).get("parts", [])
         content = "".join(part.get("text", "") for part in parts)
         usage = data.get("usageMetadata", {})
+
+        finish_reason = candidates[0].get("finishReason", "")
+        if finish_reason == "MAX_TOKENS" and not content.strip():
+            raise ProviderError(
+                "Google Gemini hit its token limit before producing any "
+                "visible output (likely spent on internal reasoning). "
+                "Try again or increase max_tokens."
+            )
 
         return GenerateResult(
             content=content,
