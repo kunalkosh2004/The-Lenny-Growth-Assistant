@@ -154,14 +154,7 @@ class ChatService:
             .limit(limit * 2)  # user + assistant pairs
         )
         messages = list(reversed(list(self.db.scalars(stmt).all())))
-        return [
-            {
-                "role": m.role,
-                "content": m.content,
-                "grounded": bool((m.message_metadata or {}).get("sources")),
-            }
-            for m in messages
-        ]
+        return [{"role": m.role, "content": m.content} for m in messages]
 
     def _format_history(self, history: list[dict]) -> str:
         if not history:
@@ -239,17 +232,31 @@ class ChatService:
             logger.warning("Retrieval failed: %s", exc)
             chunks = []
 
-        # If nothing relevant was retrieved and there's no prior *grounded*
-        # exchange to fall back on for a follow-up, refuse deterministically
-        # rather than trusting the LLM to notice the context is irrelevant
-        # (smaller local models are unreliable at this — see grounding rule
-        # 2 in SYSTEM_PROMPT). A prior refusal doesn't count — otherwise
-        # repeating the same off-topic question would slip past this check
-        # on the second try, since `history` already includes that reply.
-        has_prior_grounded_turn = any(
-            m["role"] == "assistant" and m["grounded"] for m in history
-        )
-        if not chunks and not has_prior_grounded_turn:
+        # If nothing relevant was retrieved for THIS message, refuse
+        # deterministically rather than trusting the LLM to notice the
+        # context is irrelevant (smaller local models are unreliable at
+        # this — see grounding rule 2 in SYSTEM_PROMPT).
+        #
+        # This intentionally does not look at conversation history to decide
+        # whether to bypass the check. An earlier version tried "allow it
+        # through if the prior assistant turn was grounded" to support vague
+        # follow-ups like "can you give a specific example?" — but that let
+        # one genuinely grounded exchange permanently unlock the LLM path
+        # for any unrelated question asked afterwards in the same session
+        # (e.g. "how should startups improve retention?" followed by "what
+        # is the capital of France?" would incorrectly get an LLM-generated
+        # answer, since the turn right before it was grounded).
+        #
+        # Measured against the real embedding model instead: a specific,
+        # clearly off-topic question like "what is the capital of France?"
+        # scores ~0.38 on its own regardless of prior conversation, while
+        # short follow-ups ("elaborate on that", "give a specific example",
+        # even "ok thanks") reliably score ~0.5-0.6 because vague queries
+        # aren't semantically distinctive enough to score low. So using
+        # only the current message's own retrieval — with no history
+        # exception — refuses genuinely unrelated questions consistently
+        # while still letting real follow-ups through.
+        if not chunks:
             return ChatResponse(content=NO_EVIDENCE_MESSAGE, sources=[])
 
         # 3. Build the grounded prompt.
