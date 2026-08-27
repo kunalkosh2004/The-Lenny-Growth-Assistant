@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Loader2, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, Loader2, MessageSquarePlus, Trash2 } from "lucide-react";
 import {
   createSession,
+  deleteSession,
   listSessions,
   listProviders,
   listOllamaModels,
@@ -19,10 +20,12 @@ export default function SessionSidebar({
   activeSessionId,
   onSelectSession,
   onNewChat,
+  onSessionDeleted,
 }: {
   activeSessionId: string | null;
   onSelectSession: (id: string) => void;
   onNewChat: () => void;
+  onSessionDeleted: (id: string) => void;
 }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
@@ -35,6 +38,7 @@ export default function SessionSidebar({
   const [cloudModels, setCloudModels] = useState<OllamaModel[]>([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -77,6 +81,21 @@ export default function SessionSidebar({
       onNewChat();
     } catch {
       // ignore
+    }
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Delete this chat? This can't be undone.")) return;
+    setDeletingId(id);
+    try {
+      await deleteSession(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+      onSessionDeleted(id);
+    } catch {
+      // ignore
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -295,6 +314,18 @@ export default function SessionSidebar({
                 <span className="ml-1 text-xs text-neutral-400">
                   ({session.message_count})
                 </span>
+              )}
+            </button>
+            <button
+              onClick={(e) => handleDeleteSession(e, session.id)}
+              disabled={deletingId === session.id}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-neutral-400 opacity-0 hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 disabled:opacity-100"
+              aria-label={`Delete chat: ${session.title || "New chat"}`}
+            >
+              {deletingId === session.id ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Trash2 size={13} />
               )}
             </button>
           </div>

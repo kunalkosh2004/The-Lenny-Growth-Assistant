@@ -245,6 +245,13 @@ export default function Home() {
     setShip30Success(null);
   };
 
+  /** If the deleted session was active, fall back to the empty/welcome state. */
+  const handleSessionDeleted = (deletedId: string) => {
+    if (deletedId !== activeSessionId) return;
+    setActiveSessionId(null);
+    handleNewChat();
+  };
+
   /** Create a new session and immediately send the given message. */
   const handleSuggestion = async (question: string) => {
     try {
@@ -314,6 +321,7 @@ export default function Home() {
             activeSessionId={activeSessionId}
             onSelectSession={setActiveSessionId}
             onNewChat={handleNewChat}
+            onSessionDeleted={handleSessionDeleted}
           />
         </div>
 

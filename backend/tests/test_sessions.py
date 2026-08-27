@@ -74,3 +74,36 @@ def test_missing_session_returns_404(client: TestClient) -> None:
     response = client.get("/api/sessions/00000000-0000-0000-0000-000000000001")
 
     assert response.status_code == 404
+
+
+def test_delete_session_removes_it_and_its_messages(client: TestClient) -> None:
+    session_id = client.post("/api/sessions", json={"title": "To delete"}).json()["id"]
+    client.post(
+        f"/api/sessions/{session_id}/messages",
+        json={"role": "user", "content": "This should be deleted too"},
+    )
+
+    delete_response = client.delete(f"/api/sessions/{session_id}")
+    assert delete_response.status_code == 204
+
+    get_response = client.get(f"/api/sessions/{session_id}")
+    assert get_response.status_code == 404
+
+    sessions = client.get("/api/sessions").json()
+    assert session_id not in {s["id"] for s in sessions}
+
+
+def test_delete_missing_session_returns_404(client: TestClient) -> None:
+    response = client.delete("/api/sessions/00000000-0000-0000-0000-000000000001")
+
+    assert response.status_code == 404
+
+
+def test_deleting_one_session_leaves_others_intact(client: TestClient) -> None:
+    keep_id = client.post("/api/sessions", json={"title": "Keep me"}).json()["id"]
+    delete_id = client.post("/api/sessions", json={"title": "Delete me"}).json()["id"]
+
+    client.delete(f"/api/sessions/{delete_id}")
+
+    sessions = client.get("/api/sessions").json()
+    assert {s["id"] for s in sessions} == {keep_id}

@@ -66,6 +66,11 @@ class SessionService:
         session.message_count = self._message_count(session_id)
         return session
 
+    def delete_session(self, session_id: uuid.UUID) -> None:
+        session = self._get_session_or_404(session_id)
+        self.db.delete(session)
+        self.db.commit()
+
     def add_message(self, session_id: uuid.UUID, payload: MessageCreateRequest) -> Message:
         if payload.role not in ALLOWED_MESSAGE_ROLES:
             raise HTTPException(

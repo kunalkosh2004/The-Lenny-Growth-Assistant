@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -85,6 +85,15 @@ def update_session(
 ) -> SessionSummary:
     session = service.update_session(session_id, payload)
     return _to_session_summary(session)
+
+
+@router.delete("/{session_id}", status_code=204)
+def delete_session(
+    session_id: UUID,
+    service: SessionService = Depends(get_session_service),
+) -> Response:
+    service.delete_session(session_id)
+    return Response(status_code=204)
 
 
 @router.post("/{session_id}/messages", response_model=MessageResponse, status_code=201)
