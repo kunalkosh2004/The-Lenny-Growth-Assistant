@@ -26,6 +26,10 @@ manually searching hundreds of transcripts.
 - Ollama is available locally for the demo, but the app must handle it being
   unavailable.
 - Cloud LLM credentials may be absent during local development.
+- The "agent layer" requirement is satisfied by a custom, provider-agnostic
+  skill/router architecture rather than the literal `claude-agent-sdk`
+  package — see the Agent Layer Decision note under Risks and Trade-offs
+  for why.
 
 ## Scope
 
@@ -79,3 +83,42 @@ Excluded:
 - Cloud providers introduce cost and credential handling.
 - Sandboxed artifact rendering improves safety but limits interactive HTML.
 - Docker Compose improves reproducibility but adds operational complexity.
+
+### Agent Layer Decision: custom router vs. `claude-agent-sdk`
+
+The assignment asks for the agent layer to be built with the Anthropic
+Claude Agent SDK or Pi Coding Agent. We evaluated `claude-agent-sdk`
+(the Python package matching that name) and chose **not** to build the
+core routing layer on top of it, for two concrete reasons found during
+evaluation rather than by assumption:
+
+1. **It doesn't run in-process.** `claude-agent-sdk` spawns the `claude`
+   CLI binary as a subprocess (`shutil.which("claude")`); no binary is
+   bundled with the pip package. In practice that means installing
+   Node.js and the `@anthropic-ai/claude-code` npm package inside the
+   backend's Docker image purely to route a request — a heavy runtime
+   dependency for a stateless FastAPI request handler.
+2. **It only talks to Anthropic's own models.** There is no path to
+   route an Agent SDK session through Ollama or any other provider.
+   Since the assignment separately requires the demo to run **locally
+   on Ollama, mandatory**, making the core grounded-assistant pipeline
+   depend on the Agent SDK would mean the primary demo path stops
+   working without an `ANTHROPIC_API_KEY` — directly contradicting the
+   "must work locally" requirement.
+
+Given that conflict, we built the agent layer as a custom, explicit
+skill/router architecture instead (`ChatService`, `ArtifactService`,
+`Ship30Skill` in `backend/app/services` and `backend/app/skills`,
+selected by dedicated API routes rather than free-form intent
+detection — see `architecture.md` for the routing diagram). It keeps
+clear skill boundaries, works identically regardless of which LLM
+provider is active (Ollama, OpenAI, Anthropic, or Gemini), and adds no
+extra deployment dependency.
+
+**Trade-off accepted:** this satisfies the spirit of "clear skill
+boundaries and reliable routing" from the evaluation criteria, but not
+the literal letter of "built with the Claude Agent SDK." If cloud-only
+deployment (Anthropic key always present, no local-Ollama requirement)
+were the actual target environment, adopting the Agent SDK for
+intent-based routing would be a reasonable follow-up — it is a good
+fit once the Node.js/Anthropic-only constraints stop being blockers.

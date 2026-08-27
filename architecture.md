@@ -9,12 +9,20 @@ persistence, retrieval, agent routing, LLM providers, and artifact rendering.
 flowchart LR
     Browser[Next.js Frontend] --> FastAPI[FastAPI API]
     FastAPI --> DB[(PostgreSQL)]
-    FastAPI --> Router[Agent Router]
-    Router --> RAG[Retrieval Service]
+    FastAPI --> Chat[ChatService]
+    FastAPI --> Ship30[Ship30Skill]
+    FastAPI --> Artifact[ArtifactService]
+    Chat --> RAG[Retrieval Service]
+    Ship30 --> RAG
+    Artifact --> RAG
     RAG --> Vector[(pgvector Chunks)]
-    Router --> LLM[LLM Provider Interface]
+    Chat --> LLM[LLM Provider Interface]
+    Ship30 --> LLM
+    Artifact --> LLM
     LLM --> Ollama[Ollama]
     LLM --> OpenAI[OpenAI]
+    LLM --> Anthropic[Anthropic]
+    LLM --> Gemini[Google Gemini]
 ```
 
 ## Frontend
@@ -40,7 +48,33 @@ The backend is a FastAPI app organized around:
 - `retrieval`: vector search.
 - `providers`: LLM and embedding providers.
 - `skills`: Ship 30 and artifact generation.
-- `agents`: routing between grounded Q&A and generation tasks.
+- `agents`: reserved package, currently unused — see Agent Routing below
+  for why routing lives in `api`/`services` instead.
+
+## Agent Routing
+
+There is no single "agent" that classifies free-form user intent and
+dispatches to a tool. Instead, each capability is its own explicit API
+route backed by its own service, and the **frontend chooses which route
+to call**:
+
+- `POST /api/chat` → `ChatService` — grounded Q&A with retrieval,
+  history, and deterministic refusal when nothing relevant is retrieved.
+- `POST /api/skills/ship30` → `Ship30Skill` — two-pass grounded essay
+  generation.
+- `POST /api/artifacts/generate` → `ArtifactService` — Markdown/HTML
+  artifact generation.
+
+This is a deliberate simplification, not an oversight. The assignment
+names the Anthropic Claude Agent SDK as the expected way to build the
+agent layer; we evaluated it and found two blockers documented in
+`PRD.md` under "Agent Layer Decision": it shells out to the `claude` CLI
+(a Node.js/npm dependency, not bundled with the pip package) and it can
+only call Anthropic's own models, which conflicts with this project's
+mandatory local-Ollama demo path. Rather than force-fit a tool-use agent
+loop around a single provider, each skill is reached directly and stays
+provider-agnostic — identical behavior regardless of whether Ollama,
+OpenAI, Anthropic, or Gemini is the active provider.
 
 ## Database
 
