@@ -83,7 +83,7 @@ def _build_provider(settings: Settings) -> LLMProvider:
         return OllamaProvider(
             base_url=settings.ollama_base_url,
             model=settings.ollama_model,
-            timeout=getattr(settings, "ollama_timeout_seconds", 60.0),
+            timeout=settings.ollama_timeout_seconds,
         )
 
     if name == "openai":

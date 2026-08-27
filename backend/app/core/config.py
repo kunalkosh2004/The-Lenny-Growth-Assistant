@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.1:8b"
+    # Long-form generation (e.g. the Ship 30 skill's ~1,250-word article
+    # pass) can comfortably exceed 60s on a small local CPU model, so this
+    # needs real headroom rather than a chat-response-sized budget.
+    ollama_timeout_seconds: float = 180.0
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     anthropic_api_key: str | None = None

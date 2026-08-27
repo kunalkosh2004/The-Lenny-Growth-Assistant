@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Send, Loader2, Sparkles, FileText, Code2 } from "lucide-react";
+import { Send, Loader2, Sparkles, FileText, Code2, PenLine } from "lucide-react";
 import SessionSidebar from "@/components/SessionSidebar";
 import ChatMessage from "@/components/ChatMessage";
 import ArtifactViewer from "@/components/ArtifactViewer";
@@ -13,6 +13,7 @@ import {
   generateArtifact,
   listSessionArtifacts,
   getArtifact,
+  generateShip30,
 } from "@/lib/api";
 import type {
   ArtifactStored,
@@ -47,6 +48,13 @@ export default function Home() {
   const [loadingArtifactId, setLoadingArtifactId] = useState<string | null>(
     null,
   );
+  const [rightPanelTab, setRightPanelTab] = useState<"artifacts" | "ship30">(
+    "artifacts",
+  );
+  const [ship30Topic, setShip30Topic] = useState("");
+  const [generatingShip30, setGeneratingShip30] = useState(false);
+  const [ship30Error, setShip30Error] = useState<string | null>(null);
+  const [ship30Success, setShip30Success] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const refreshArtifactHistory = useCallback((sessionId: string) => {
@@ -183,6 +191,42 @@ export default function Home() {
     }
   };
 
+  const handleGenerateShip30 = async () => {
+    if (!ship30Topic.trim() || !activeSessionId) return;
+    setGeneratingShip30(true);
+    setShip30Error(null);
+    setShip30Success(null);
+    try {
+      const result = await generateShip30({
+        topic: ship30Topic.trim(),
+        sessionId: activeSessionId,
+      });
+      if (result.status !== "ok") {
+        setShip30Error(
+          result.error || "Not enough transcript evidence to write this essay.",
+        );
+        return;
+      }
+      // The essay is persisted as an assistant message server-side; reload
+      // the session so it appears in the chat thread with its sources.
+      const detail = await getSession(activeSessionId);
+      const display: DisplayMessage[] = detail.messages.map((m) => ({
+        ...m,
+        sources: (m.metadata?.sources as Source[]) || [],
+        groundingStatus: (m.metadata?.grounding_status as string) || undefined,
+      }));
+      setMessages(display);
+      setShip30Success(`Essay added to chat (${result.word_count} words).`);
+      setShip30Topic("");
+    } catch {
+      setShip30Error(
+        "Failed to generate the essay. Check that the backend is running.",
+      );
+    } finally {
+      setGeneratingShip30(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -195,6 +239,10 @@ export default function Home() {
     setActiveArtifact(null);
     setArtifactHistory([]);
     setShowArtifacts(false);
+    setRightPanelTab("artifacts");
+    setShip30Topic("");
+    setShip30Error(null);
+    setShip30Success(null);
   };
 
   /** Create a new session and immediately send the given message. */
@@ -405,6 +453,73 @@ export default function Home() {
               />
             ) : (
               <div className="flex h-full flex-col overflow-y-auto bg-white p-5">
+                {/* Panel tabs */}
+                <div className="mb-4 flex gap-1 rounded-md border border-line bg-paper p-1">
+                  <button
+                    onClick={() => setRightPanelTab("artifacts")}
+                    className={`flex-1 rounded px-3 py-1.5 text-xs font-medium ${
+                      rightPanelTab === "artifacts"
+                        ? "bg-white text-ink shadow-sm"
+                        : "text-neutral-500 hover:text-ink"
+                    }`}
+                  >
+                    Artifacts
+                  </button>
+                  <button
+                    onClick={() => setRightPanelTab("ship30")}
+                    className={`flex-1 rounded px-3 py-1.5 text-xs font-medium ${
+                      rightPanelTab === "ship30"
+                        ? "bg-white text-ink shadow-sm"
+                        : "text-neutral-500 hover:text-ink"
+                    }`}
+                  >
+                    Ship 30 Essay
+                  </button>
+                </div>
+
+                {rightPanelTab === "ship30" ? (
+                  <>
+                    <h3 className="text-sm font-semibold">
+                      Ship 30 for 30 Essay
+                    </h3>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Generate a ~1,250-word essay grounded in transcript
+                      knowledge. It's added to this chat as a message.
+                    </p>
+
+                    <textarea
+                      value={ship30Topic}
+                      onChange={(e) => setShip30Topic(e.target.value)}
+                      className="mt-3 min-h-[100px] resize-none rounded-md border border-line bg-paper p-3 text-sm outline-none"
+                      placeholder="Describe the essay topic... (e.g. 'How to find product-market fit')"
+                    />
+
+                    {ship30Error && (
+                      <p className="mt-2 text-xs text-red-600">
+                        {ship30Error}
+                      </p>
+                    )}
+                    {ship30Success && (
+                      <p className="mt-2 text-xs text-green-700">
+                        {ship30Success}
+                      </p>
+                    )}
+
+                    <button
+                      onClick={handleGenerateShip30}
+                      disabled={!ship30Topic.trim() || generatingShip30}
+                      className="mt-3 flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                    >
+                      {generatingShip30 ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <PenLine size={16} />
+                      )}
+                      Generate Essay
+                    </button>
+                  </>
+                ) : (
+                  <>
                 {artifactHistory.length > 0 && (
                   <div className="mb-5">
                     <h3 className="text-sm font-semibold">Artifact History</h3>
@@ -490,6 +605,8 @@ export default function Home() {
                   )}
                   Generate
                 </button>
+                  </>
+                )}
               </div>
             )}
           </div>
