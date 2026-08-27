@@ -37,7 +37,10 @@ class ArtifactGenerateRequest(BaseModel):
         min_length=3, max_length=50000,
         description="Description of what to generate",
     )
-    top_k: int = Field(default=10, ge=1, le=30)
+    # Lower than chat's default context isn't needed here — fewer retrieved
+    # chunks means less prompt to prefill, which matters a lot on a CPU-bound
+    # local model where prefill (not just decode) is slow.
+    top_k: int = Field(default=6, ge=1, le=30)
 
 
 @router.post("/generate")

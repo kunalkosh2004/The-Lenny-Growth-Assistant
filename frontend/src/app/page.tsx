@@ -28,6 +28,23 @@ type DisplayMessage = MessageResponse & {
   groundingStatus?: string;
 };
 
+/** Seconds elapsed since `active` became true. Resets to 0 when it goes false. */
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setSeconds(0);
+      return;
+    }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      setSeconds(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [active]);
+  return seconds;
+}
+
 export default function Home() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -56,6 +73,10 @@ export default function Home() {
   const [ship30Error, setShip30Error] = useState<string | null>(null);
   const [ship30Success, setShip30Success] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const sendingSeconds = useElapsedSeconds(sending);
+  const generatingArtifactSeconds = useElapsedSeconds(generatingArtifact);
+  const generatingShip30Seconds = useElapsedSeconds(generatingShip30);
 
   const refreshArtifactHistory = useCallback((sessionId: string) => {
     listSessionArtifacts(sessionId)
@@ -411,6 +432,13 @@ export default function Home() {
                   <div className="rounded-md border border-line bg-white p-4">
                     <p className="text-xs text-neutral-400">
                       Thinking...
+                      {sendingSeconds >= 8 && (
+                        <span>
+                          {" "}
+                          ({sendingSeconds}s — local models can take a
+                          while, no need to refresh)
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -513,17 +541,31 @@ export default function Home() {
                       </p>
                     )}
 
+                    {generatingShip30 && (
+                      <p className="mt-2 text-xs text-neutral-400">
+                        Writing a full two-pass essay locally can take 1-3
+                        minutes{generatingShip30Seconds > 0 && ` (${generatingShip30Seconds}s so far`}
+                        {generatingShip30Seconds > 0 && ")"} — it'll appear
+                        in the chat automatically, no need to refresh.
+                      </p>
+                    )}
+
                     <button
                       onClick={handleGenerateShip30}
                       disabled={!ship30Topic.trim() || generatingShip30}
                       className="mt-3 flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                     >
                       {generatingShip30 ? (
-                        <Loader2 size={16} className="animate-spin" />
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Generating... {generatingShip30Seconds}s
+                        </>
                       ) : (
-                        <PenLine size={16} />
+                        <>
+                          <PenLine size={16} />
+                          Generate Essay
+                        </>
                       )}
-                      Generate Essay
                     </button>
                   </>
                 ) : (
@@ -601,17 +643,31 @@ export default function Home() {
                   placeholder="Describe what to generate... (e.g. 'Create a growth strategy memo' or 'Build a landing page explaining retention frameworks')"
                 />
 
+                {generatingArtifact && (
+                  <p className="mt-2 text-xs text-neutral-400">
+                    Generating locally can take 1-3 minutes
+                    {generatingArtifactSeconds > 0 &&
+                      ` (${generatingArtifactSeconds}s so far)`}{" "}
+                    — it'll appear here automatically, no need to refresh.
+                  </p>
+                )}
+
                 <button
                   onClick={handleGenerateArtifact}
                   disabled={!artifactRequest.trim() || generatingArtifact}
                   className="mt-3 flex items-center justify-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                 >
                   {generatingArtifact ? (
-                    <Loader2 size={16} className="animate-spin" />
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Generating... {generatingArtifactSeconds}s
+                    </>
                   ) : (
-                    <Sparkles size={16} />
+                    <>
+                      <Sparkles size={16} />
+                      Generate
+                    </>
                   )}
-                  Generate
                 </button>
                   </>
                 )}

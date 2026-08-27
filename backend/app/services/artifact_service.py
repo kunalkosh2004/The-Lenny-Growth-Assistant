@@ -228,7 +228,14 @@ class ArtifactService:
             ChatMessage(role="system", content=system_prompt),
             ChatMessage(role="user", content=user_prompt),
         ]
-        result = self._llm.generate(messages, temperature=0.7, max_tokens=4096)
+        # Cap generation length per type rather than a flat 4096: this is a
+        # worst-case safety bound (typical output stays well under it), but
+        # on a CPU-bound local model every token costs real wall-clock time,
+        # so there's no reason to leave headroom the content doesn't need.
+        # Markdown targets 800-1500 words (~2000 tokens); HTML needs more
+        # room for a full document plus embedded CSS.
+        max_tokens = 2048 if artifact_type == "markdown" else 3072
+        result = self._llm.generate(messages, temperature=0.7, max_tokens=max_tokens)
         content = self._strip_code_fence(result.content)
         if artifact_type == "html":
             content = self._extract_html_document(content)
